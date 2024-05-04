@@ -10,16 +10,16 @@
 
 struct ClientInfo {
     int clientID;
-    std::string name;
+    char name[30];
     int age;
-    double nationalID;
-    double mobileNum;
-    // std::string email;
+    char nationalID[20];
+    char mobileNum[15];
+    char email[40];
     double balance;
 };
 
 struct Transaction {
-    std::string fromAccount;
-    std::string toAccount;
+    int fromAccount;
+    int toAccount;
     double amount;
 };

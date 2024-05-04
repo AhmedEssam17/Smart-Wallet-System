@@ -63,31 +63,41 @@ void Client::connectToServer(const string& serverAddress, int port) {
     cout << "Connected to server" << endl;
 }
 
-void sendString(int clientSocket, const std::string& str) {
-    int len = str.size() + 1;
-    send(clientSocket, &len, sizeof(len), 0);
-    send(clientSocket, str.c_str(), len, 0);
-}
+// void sendString(int clientSocket, const std::string& str) {
+//     int len = str.size() + 1;
+//     send(clientSocket, &len, sizeof(len), 0);
+//     send(clientSocket, str.c_str(), len, 0);
+// }
 
-void Client::sendClientInfo(const ClientInfo& info){
-    // Send ID
-    send(clientSocket, &info.clientID, sizeof(info.clientID), 0);
+// void Client::sendClientInfo(const ClientInfo& info){
+//     // Send ID
+//     send(clientSocket, &info.clientID, sizeof(info.clientID), 0);
 
-    // Send name
-    sendString(clientSocket, info.name);
+//     // Send name
+//     sendString(clientSocket, info.name);
 
-    // Send age
-    send(clientSocket, &info.age, sizeof(info.age), 0);
+//     // Send age
+//     send(clientSocket, &info.age, sizeof(info.age), 0);
 
-    // Send national ID
-    send(clientSocket, &info.nationalID, sizeof(info.nationalID), 0);
+//     // Send national ID
+//     send(clientSocket, &info.nationalID, sizeof(info.nationalID), 0);
 
-    // Send mobile number
-    // sendString(clientSocket, info.mobileNum);
-    send(clientSocket, &info.mobileNum, sizeof(info.mobileNum), 0);
+//     // Send mobile number
+//     // sendString(clientSocket, info.mobileNum);
+//     send(clientSocket, &info.mobileNum, sizeof(info.mobileNum), 0);
 
-    // Send email
-    // sendString(clientSocket, info.email);
+//     // Send email
+//     // sendString(clientSocket, info.email);
+// }
+
+// std::vector<char> serializeClientInfo(const ClientInfo& clientInfo) {
+//     std::vector<char> data(sizeof(ClientInfo));
+//     memcpy(data.data(), &clientInfo, sizeof(ClientInfo));
+//     return data;
+// }
+
+void Client::sendClientInfo(const ClientInfo& clientInfo) {
+    send(clientSocket, &clientInfo, sizeof(clientInfo), 0);
 }
 
 void Client::depositMoney(double amount){
@@ -122,12 +132,13 @@ int main() {
     client.connectToServer(SERVERADDR, PORT);
 
     ClientInfo info;
-    info.clientID = 5555;
-    info.name = "AhmedEssam";
+    info.clientID = 4444;
+    strcpy(info.name, "Essam");
     info.age = 23;
-    info.nationalID = 30010060100217;
-    info.mobileNum = 1111168909;
-    // info.email = "ahmedessam020@gmail.com";
+    strcpy(info.nationalID, "30010060100217");
+    strcpy(info.mobileNum, "01111168909");
+    strcpy(info.email, "ahmedessam222@gmail.com");
+    info.balance = 0.0;
 
     client.sendClientInfo(info);
     cout << "Sent client info" << endl;

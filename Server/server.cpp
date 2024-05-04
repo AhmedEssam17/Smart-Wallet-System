@@ -8,6 +8,7 @@
 #include <sqlite3.h>
 #include <thread>
 #include <mutex>
+#include <vector>
 using namespace std;
 
 sqlite3* db;
@@ -99,11 +100,11 @@ void Server::listenForConnections() {
         }
 
         // Handle the client connection in a separate thread or process
-        // std::thread clientThread(&Server::handleConnection, this, clientSocket);
-        // clientThread.detach(); // Detach the thread to let it run independently
-        // clientCount++;
-        // cout << "clientCount = " << clientCount << endl;
-        handleConnection(clientSocket);
+        std::thread clientThread(&Server::handleConnection, this, clientSocket);
+        clientThread.detach(); // Detach the thread to let it run independently
+        clientCount++;
+        cout << "clientCount = " << clientCount << endl;
+        // handleConnection(clientSocket);
     }
 }
 
@@ -111,8 +112,8 @@ void storeClientInfo(const ClientInfo& info) {
     char* errMsg = nullptr;
 
     // Construct the SQL query using placeholders (?)
-    string sql = "INSERT INTO clients (clientID, name, age, nationalID, mobileNum, balance) "
-                 "VALUES (?, ?, ?, ?, ?, ?);";
+    string sql = "INSERT INTO clients (clientID, name, age, nationalID, mobileNum, email, balance) "
+                 "VALUES (?, ?, ?, ?, ?, ?, ?);";
 
     // Prepare the SQL statement
     sqlite3_stmt* stmt;
@@ -124,12 +125,12 @@ void storeClientInfo(const ClientInfo& info) {
 
     // Bind parameters to the statement
     sqlite3_bind_int(stmt, 1, info.clientID);
-    sqlite3_bind_text(stmt, 2, info.name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, info.name, strlen(info.name), SQLITE_STATIC);
     sqlite3_bind_int(stmt, 3, info.age);
-    sqlite3_bind_double(stmt, 4, info.nationalID);
-    sqlite3_bind_double(stmt, 5, info.mobileNum);
-    // sqlite3_bind_text(stmt, 6, info.email.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_double(stmt, 6, info.balance);
+    sqlite3_bind_text(stmt, 4, info.nationalID, strlen(info.nationalID), SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 5, info.mobileNum, strlen(info.mobileNum), SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 6, info.email, strlen(info.email), SQLITE_STATIC);
+    sqlite3_bind_double(stmt, 7, info.balance);
 
     // Execute the statement
     rc = sqlite3_step(stmt);
@@ -144,6 +145,7 @@ void storeClientInfo(const ClientInfo& info) {
 }
 
 
+
 void Server::handleConnection(int clientSocket) {
     try {
         if (clientSocket < 0) {
@@ -151,7 +153,6 @@ void Server::handleConnection(int clientSocket) {
             return;
         }
 
-        cout << "Inside handleConnection" << endl;
         // Receive client info
         ClientInfo clientInfo = receiveClientInfo(clientSocket);
         cout << "ClientInfo received Successfully" << endl;
@@ -160,6 +161,7 @@ void Server::handleConnection(int clientSocket) {
         cout << "Age = " << clientInfo.age << endl;
         cout << "Mobile Num = " << clientInfo.mobileNum << endl;
         cout << "NationalID = " << clientInfo.nationalID << endl;
+        cout << "Balance = " << clientInfo.balance << endl;
         // cout << "email = " << clientInfo.email << endl;
 
         storeClientInfo(clientInfo);
@@ -204,31 +206,31 @@ void Server::handleConnection(int clientSocket) {
     }
 }
 
-template <typename T>
-void receiveMember(int clientSocket, T& member, const char* errorMessage) {
-    int bytesRecv = recv(clientSocket, &member, sizeof(member), 0);
-    if (bytesRecv < 0) {
-        cerr << errorMessage << endl;
-        close(clientSocket);
-        return;
-    }
-}
+// template <typename T>
+// void receiveMember(int clientSocket, T& member, const char* errorMessage) {
+//     int bytesRecv = recv(clientSocket, &member, sizeof(member), 0);
+//     if (bytesRecv < 0) {
+//         cerr << errorMessage << endl;
+//         close(clientSocket);
+//         return;
+//     }
+// }
 
-string receiveString(int clientSocket) {
-    int len;
-    receiveMember(clientSocket, len, "Error receiving string length");
+// string receiveString(int clientSocket) {
+//     int len;
+//     receiveMember(clientSocket, len, "Error receiving string length");
 
-    if (len >= MAX_STRING_SIZE) {
-        cerr << "String length exceeds buffer size: "<< len << endl;
-        close(clientSocket);
-        return "";
-    }
+//     if (len >= MAX_STRING_SIZE) {
+//         cerr << "String length exceeds buffer size: "<< len << endl;
+//         close(clientSocket);
+//         return "";
+//     }
 
-    char buffer[MAX_STRING_SIZE];
-    receiveMember(clientSocket, buffer, "Error receiving string data");
+//     char buffer[MAX_STRING_SIZE];
+//     receiveMember(clientSocket, buffer, "Error receiving string data");
 
-    return std::string(buffer, len);
-}
+//     return std::string(buffer, len);
+// }
 
 bool checkClientExists(const int& clientID) {
     char* errMsg = nullptr;
@@ -256,29 +258,41 @@ bool checkClientExists(const int& clientID) {
     return exists;
 }
 
-ClientInfo Server::receiveClientInfo(int clientSocket){
+// ClientInfo Server::receiveClientInfo(int clientSocket){
+//     ClientInfo info;
+//     cout << "Inside receiveClientInfo" << endl;
+//     receiveMember(clientSocket, info.clientID, "Error receiving Client's ID");
+
+//     // // Check if the clientID already exists in the database
+//     // bool clientExists = checkClientExists(info.clientID);
+//     // if (clientExists) {
+//     //     cerr << "Client with ID " << info.clientID << " already exists." << endl;
+//     //     // Handle the situation, e.g., reject the client info or update the existing record
+//     //     // For now, let's just return an empty info
+//     //     return info;
+//     // }
+
+//     info.name = receiveString(clientSocket);
+//     receiveMember(clientSocket, info.age, "Error receiving Client's Age");
+//     info.nationalID = receiveString(clientSocket);
+//     // receiveMember(clientSocket, info.nationalID, "Error receiving Client's NationalID");
+//     // receiveMember(clientSocket, info.mobileNum, "Error receiving Client's Mobile Number");
+//     info.mobileNum = receiveString(clientSocket);
+//     info.email = receiveString(clientSocket);
+//     info.balance = 0;
+//     cout << "End of receiveClientInfo" << endl;
+//     return info;
+// }
+
+// ClientInfo deserializeClientInfo(const std::vector<char>& data) {
+//     ClientInfo clientInfo;
+//     memcpy(&clientInfo, data.data(), sizeof(ClientInfo));
+//     return clientInfo;
+// }
+
+ClientInfo Server::receiveClientInfo(int clientSocket) {
     ClientInfo info;
-    cout << "Inside receiveClientInfo" << endl;
-    receiveMember(clientSocket, info.clientID, "Error receiving Client's ID");
-
-    // // Check if the clientID already exists in the database
-    // bool clientExists = checkClientExists(info.clientID);
-    // if (clientExists) {
-    //     cerr << "Client with ID " << info.clientID << " already exists." << endl;
-    //     // Handle the situation, e.g., reject the client info or update the existing record
-    //     // For now, let's just return an empty info
-    //     return info;
-    // }
-
-    info.name = receiveString(clientSocket);
-    receiveMember(clientSocket, info.age, "Error receiving Client's Age");
-    // info.nationalID = receiveString(clientSocket);
-    receiveMember(clientSocket, info.nationalID, "Error receiving Client's NationalID");
-    receiveMember(clientSocket, info.mobileNum, "Error receiving Client's Mobile Number");
-    // info.mobileNum = receiveString(clientSocket);
-    // info.email = receiveString(clientSocket);
-    info.balance = 0;
-    cout << "End of receiveClientInfo" << endl;
+    recv(clientSocket, &info, sizeof(info), 0);
     return info;
 }
 
@@ -380,37 +394,37 @@ void Server::withdrawMoney(const int& clientID, double amount){
 }
 
 
-void Server::processTransaction(const int& clientID, const Transaction& transaction){
-    // Check if the fromAccount is equal to clientID
-    if (transaction.fromAccount != std::to_string(clientID)) {
-        cerr << "Invalid transaction: fromAccount does not match clientID" << endl;
-        return;
-    }
+// void Server::processTransaction(const int& clientID, const Transaction& transaction){
+//     // Check if the fromAccount is equal to clientID
+//     if (transaction.fromAccount != std::to_string(clientID)) {
+//         cerr << "Invalid transaction: fromAccount does not match clientID" << endl;
+//         return;
+//     }
 
-    // Check if the toAccount exists in the database
-    bool toAccountExists = checkClientExists(std::stoi(transaction.toAccount));
-    if (!toAccountExists) {
-        cerr << "Invalid transaction: toAccount does not exist" << endl;
-        return;
-    }
+//     // Check if the toAccount exists in the database
+//     bool toAccountExists = checkClientExists(std::stoi(transaction.toAccount));
+//     if (!toAccountExists) {
+//         cerr << "Invalid transaction: toAccount does not exist" << endl;
+//         return;
+//     }
 
-    // Check if the amount required to be transferred is sufficient in the current user balance
-    double balance = getAccountBalance(clientID);
-    if (balance < transaction.amount) {
-        cerr << "Invalid transaction: insufficient balance" << endl;
-        return;
-    }
+//     // Check if the amount required to be transferred is sufficient in the current user balance
+//     double balance = getAccountBalance(clientID);
+//     if (balance < transaction.amount) {
+//         cerr << "Invalid transaction: insufficient balance" << endl;
+//         return;
+//     }
 
-    // Process the transaction
-    // For example, update the balances in the database
-    // Withdraw amount from the client's account
-    withdrawMoney(clientID, transaction.amount);
+//     // Process the transaction
+//     // For example, update the balances in the database
+//     // Withdraw amount from the client's account
+//     withdrawMoney(clientID, transaction.amount);
 
-    // Deposit amount to the recipient's account
-    depositMoney(std::stoi(transaction.toAccount), transaction.amount);
+//     // Deposit amount to the recipient's account
+//     depositMoney(std::stoi(transaction.toAccount), transaction.amount);
 
-    cout << "Transaction processed successfully" << endl;
-}
+//     cout << "Transaction processed successfully" << endl;
+// }
 
 void Server::undoTransaction(const int& clientID){
 
@@ -447,10 +461,10 @@ void Server::displayClientInfo(const int& clientID){
     int id = sqlite3_column_int(stmt, 1);
     const unsigned char* name = sqlite3_column_text(stmt, 2);
     int age = sqlite3_column_int(stmt, 3);
-    double nationalID = sqlite3_column_double(stmt, 4);
-    double mobileNum = sqlite3_column_double(stmt, 5);
-    // const unsigned char* email = sqlite3_column_text(stmt, 6);
-    double balance = sqlite3_column_double(stmt, 6);
+    const unsigned char* nationalID = sqlite3_column_text(stmt, 4);
+    const unsigned char* mobileNum = sqlite3_column_text(stmt, 5);
+    const unsigned char* email = sqlite3_column_text(stmt, 6);
+    double balance = sqlite3_column_double(stmt, 7);
 
     // Print the client information
     cout << "Client ID: " << id << endl;
@@ -458,7 +472,7 @@ void Server::displayClientInfo(const int& clientID){
     cout << "Age: " << age << endl;
     cout << "National ID: " << nationalID << endl;
     cout << "Mobile Number: " << mobileNum << endl;
-    // cout << "Email: " << email << endl;
+    cout << "Email: " << email << endl;
     cout << "Balance: " << balance << endl;
 
     // Finalize the statement
@@ -480,8 +494,9 @@ void initDatabase(){
                   "clientID INTEGER UNIQUE,"
                   "name TEXT NOT NULL,"
                   "age INTEGER,"
-                  "nationalID REAL,"
-                  "mobileNum REAL,"
+                  "nationalID TEXT,"
+                  "mobileNum TEXT,"
+                  "email TEXT,"
                   "balance REAL"
                   ");";
     
