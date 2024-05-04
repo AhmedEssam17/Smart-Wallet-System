@@ -6,22 +6,8 @@
 #include <unistd.h>
 #include <vector>
 #include <map>
+#include "../conf/conf.h"
 using namespace std;
-
-struct ClientInfo {
-    int clientId;
-    string name;
-    int age;
-    string nationalID;
-    string mobileNum;
-    string email;
-};
-
-struct Transaction {
-    string fromAccount;
-    string toAccount;
-    double amount;
-};
 
 class Client {
 public:
@@ -75,37 +61,79 @@ void Client::connectToServer(const string& serverAddress, int port) {
     }
 
     cout << "Connected to server" << endl;
+
+    // while(true){
+    //     // Stay connected
+    // }
+}
+
+void sendString(int clientSocket, const std::string& str) {
+    int len = str.size() + 1;
+    send(clientSocket, &len, sizeof(len), 0);
+    send(clientSocket, str.c_str(), len, 0);
+}
+
+void Client::sendClientInfo(const ClientInfo& info){
+    // Send ID
+    send(clientSocket, &info.clientID, sizeof(info.clientID), 0);
+
+    // Send name
+    sendString(clientSocket, info.name);
+
+    // Send age
+    send(clientSocket, &info.age, sizeof(info.age), 0);
+
+    // Send national ID
+    sendString(clientSocket, info.nationalID);
+
+    // Send mobile number
+    sendString(clientSocket, info.mobileNum);
+
+    // Send email
+    sendString(clientSocket, info.email);
+}
+
+void Client::depositMoney(double amount){
+
+}
+
+void Client::withdrawMoney(double amount){
+
+}
+
+double Client::getAccountBalance(){
+    double balance = 100.0;
+    return balance;
+}
+
+void Client::sendTransaction(const Transaction& transaction){
+
+}
+
+void Client::undoTransaction(){
+
+}
+
+void Client::redoTransaction(){
+
 }
 
 int main() {
     cout << "Client" << endl;
 
     Client client;
-    client.connectToServer("127.0.0.1", 8888);
+    client.connectToServer(SERVERADDR, PORT);
 
-    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (clientSocket < 0) {
-        std::cerr << "Error creating socket" << std::endl;
-        return 1;
-    }
+    ClientInfo info;
+    info.clientID = 1234;
+    info.name = "Ahmed Essam";
+    info.age = 23;
+    info.nationalID = "30010060100217";
+    info.mobileNum = "01111168909";
+    info.email = "ahmedessam020@gmail.com";
 
-    // Send a message to the server
-    const char* message = "Hello, server!";
-    int bytesSent = send(clientSocket, message, strlen(message), 0);
-    if (bytesSent < 0) {
-        std::cerr << "Error sending data" << std::endl;
-        return 1;
-    }
-
-    // Receive a response from the server
-    char buffer[1024];
-    int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-    if (bytesReceived < 0) {
-        std::cerr << "Error receiving data" << std::endl;
-        return 1;
-    }
-
-    std::cout << "Server response: " << buffer << std::endl;
+    client.sendClientInfo(info);
+    cout << "Sent client info" << endl;
 
     return 0;
 }
