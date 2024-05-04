@@ -61,10 +61,6 @@ void Client::connectToServer(const string& serverAddress, int port) {
     }
 
     cout << "Connected to server" << endl;
-
-    // while(true){
-    //     // Stay connected
-    // }
 }
 
 void sendString(int clientSocket, const std::string& str) {
@@ -125,7 +121,7 @@ int main() {
     client.connectToServer(SERVERADDR, PORT);
 
     ClientInfo info;
-    info.clientID = 1234;
+    info.clientID = 8888;
     info.name = "Ahmed Essam";
     info.age = 23;
     info.nationalID = "30010060100217";
@@ -134,6 +130,10 @@ int main() {
 
     client.sendClientInfo(info);
     cout << "Sent client info" << endl;
+
+    while(true){
+        // Stay connected
+    }
 
     return 0;
 }

@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include "../conf/conf.h"
 #include <sqlite3.h>
+#include <thread>
+#include <mutex>
 using namespace std;
 
 sqlite3* db;
@@ -18,9 +20,9 @@ public:
     void start();
     void stop();
 
+    double getAccountBalance(const int& clientID);
     void depositMoney(const int& clientID, double amount);
     void withdrawMoney(const int& clientID, double amount);
-    double getAccountBalance(const int& clientID);
     void processTransaction(const int& clientID, const Transaction& transaction);
     void undoTransaction(const int& clientID);
     void redoTransaction(const int& clientID);
@@ -28,6 +30,7 @@ public:
 
 private:
     int serverSocket;
+    std::mutex dbMutex;
     void initSocket();
     void closeSocket();
     void listenForConnections();
@@ -84,6 +87,8 @@ void Server::listenForConnections() {
 
     cout << "Server started. Listening on port 8888..." << endl;
 
+    int clientCount = 0;
+
     while (true) {
         struct sockaddr_in clientAddr;
         socklen_t clientAddrLen = sizeof(clientAddr);
@@ -94,6 +99,10 @@ void Server::listenForConnections() {
         }
 
         // Handle the client connection in a separate thread or process
+        // std::thread clientThread(&Server::handleConnection, this, clientSocket);
+        // clientThread.detach(); // Detach the thread to let it run independently
+        // clientCount++;
+        // cout << "clientCount = " << clientCount << endl;
         handleConnection(clientSocket);
     }
 }
@@ -136,29 +145,60 @@ void storeClientInfo(const ClientInfo& info) {
 
 
 void Server::handleConnection(int clientSocket) {
+    try {
+        if (clientSocket < 0) {
+            cerr << "Invalid client socket" << endl;
+            return;
+        }
 
-    // cout << "1) Register as new User" << endl;
-    // cout << "2) Login" << endl;
+        cout << "Inside handleConnection" << endl;
+        // Receive client info
+        ClientInfo clientInfo = receiveClientInfo(clientSocket);
+        cout << "ClientInfo received Successfully" << endl;
+        cout << "ID = " << clientInfo.clientID << endl;
+        cout << "Name = " << clientInfo.name << endl;
+        cout << "Age = " << clientInfo.age << endl;
+        cout << "Mobile Num = " << clientInfo.mobileNum << endl;
+        cout << "NationalID = " << clientInfo.nationalID << endl;
+        cout << "email = " << clientInfo.email << endl;
+
+        storeClientInfo(clientInfo);
+
+        cout << endl;
+        cout << endl;
+
+        cout << "Attempting to getAccountBalance from DB" << endl;
+        double balance = getAccountBalance(clientInfo.clientID);
+        cout << "Current Balance in account = " << balance << endl;
+        cout << endl;
+
+        cout << "Attempting to Deposit money in wallet" << endl;
+        depositMoney(clientInfo.clientID, 5000.0);
+        balance = getAccountBalance(clientInfo.clientID);
+        cout << "Current Balance in account = " << balance << endl;
+        cout << endl;
+
+        cout << "Attempting to withdraw money available in wallet" << endl;
+        withdrawMoney(clientInfo.clientID, 2000.0);
+        balance = getAccountBalance(clientInfo.clientID);
+        cout << "Current Balance in account = " << balance << endl;
+        cout << endl;
+
+        cout << "Attempting to withdraw money more than there in wallet" << endl;
+        withdrawMoney(clientInfo.clientID, 7000.0);
+        balance = getAccountBalance(clientInfo.clientID);
+        cout << "Current Balance in account = " << balance << endl;
+        cout << endl;
 
 
-    // Receive client info
-    ClientInfo clientInfo = receiveClientInfo(clientSocket);
-    cout << "ClientInfo received Successfully" << endl;
-    cout << "ID = " << clientInfo.clientID << endl;
-    cout << "Name = " << clientInfo.name << endl;
-    cout << "Age = " << clientInfo.age << endl;
-    cout << "Mobile Num = " << clientInfo.mobileNum << endl;
-    cout << "NationalID = " << clientInfo.nationalID << endl;
-    cout << "email = " << clientInfo.email << endl;
-    storeClientInfo(clientInfo);
-    // Handle the received client info
+        while(true){
 
-    // while(true){
-
-    // }
-
-    // Close the client socket
-    close(clientSocket);
+        }
+        // Close the client socket
+        close(clientSocket);
+    } catch (const std::exception& e) {
+        cerr << "Error in handling client connection: " << e.what() << endl;
+    }
 }
 
 template <typename T>
@@ -175,6 +215,12 @@ string receiveString(int clientSocket) {
     int len;
     receiveMember(clientSocket, len, "Error receiving string length");
 
+    if (len >= MAX_STRING_SIZE) {
+        cerr << "String length exceeds buffer size" << endl;
+        close(clientSocket);
+        return "";
+    }
+
     char buffer[MAX_STRING_SIZE];
     receiveMember(clientSocket, buffer, "Error receiving string data");
 
@@ -183,7 +229,7 @@ string receiveString(int clientSocket) {
 
 ClientInfo Server::receiveClientInfo(int clientSocket){
     ClientInfo info;
-    
+    cout << "Inside receiveClientInfo" << endl;
     receiveMember(clientSocket, info.clientID, "Error receiving Client's ID");
     info.name = receiveString(clientSocket);
     receiveMember(clientSocket, info.age, "Error receiving Client's Age");
@@ -191,22 +237,107 @@ ClientInfo Server::receiveClientInfo(int clientSocket){
     info.mobileNum = receiveString(clientSocket);
     info.email = receiveString(clientSocket);
     info.balance = 0.0;
-
+    cout << "End of receiveClientInfo" << endl;
     return info;
 }
 
-void Server::depositMoney(const int& clientID, double amount){
+double Server::getAccountBalance(const int& clientID){
+    double balance = 0.0;
+    char* errMsg = nullptr;
 
+    // Construct the SQL query to select the balance for the given clientID
+    string sql = "SELECT balance FROM clients WHERE clientID = ?;";
+
+    // Prepare the SQL statement
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        cerr << "SQL prepare error: " << sqlite3_errmsg(db) << endl;
+        return balance;
+    }
+
+    // Bind parameters to the statement
+    sqlite3_bind_int(stmt, 1, clientID);
+
+    // Execute the statement
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        balance = sqlite3_column_double(stmt, 0);
+    }
+
+    // Finalize the statement
+    sqlite3_finalize(stmt);
+
+    return balance;
+}
+
+void Server::depositMoney(const int& clientID, double amount){
+    double currentBalance = getAccountBalance(clientID);
+    double newBalance = currentBalance + amount;
+
+    char* errMsg = nullptr;
+
+    // Construct the SQL query to update the balance for the given clientID
+    string sql = "UPDATE clients SET balance = ? WHERE clientID = ?;";
+
+    // Prepare the SQL statement
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        cerr << "SQL prepare error: " << sqlite3_errmsg(db) << endl;
+        return;
+    }
+
+    // Bind parameters to the statement
+    sqlite3_bind_double(stmt, 1, newBalance);
+    sqlite3_bind_int(stmt, 2, clientID);
+
+    // Execute the statement
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        cerr << "SQL execute error: " << sqlite3_errmsg(db) << endl;
+    }
+
+    // Finalize the statement
+    sqlite3_finalize(stmt);
 }
 
 void Server::withdrawMoney(const int& clientID, double amount){
+    double currentBalance = getAccountBalance(clientID);
+    double newBalance = currentBalance - amount;
 
+    if (newBalance < 0) {
+        cerr << "Insufficient balance" << endl;
+        return;
+    }
+
+    char* errMsg = nullptr;
+
+    // Construct the SQL query to update the balance for the given clientID
+    string sql = "UPDATE clients SET balance = ? WHERE clientID = ?;";
+
+    // Prepare the SQL statement
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        cerr << "SQL prepare error: " << sqlite3_errmsg(db) << endl;
+        return;
+    }
+
+    // Bind parameters to the statement
+    sqlite3_bind_double(stmt, 1, newBalance);
+    sqlite3_bind_int(stmt, 2, clientID);
+
+    // Execute the statement
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        cerr << "SQL execute error: " << sqlite3_errmsg(db) << endl;
+    }
+
+    // Finalize the statement
+    sqlite3_finalize(stmt);
 }
 
-double Server::getAccountBalance(const int& clientID){
-    double balance = 100.0;
-    return balance;
-}
 
 void Server::processTransaction(const int& clientID, const Transaction& transaction){
 
