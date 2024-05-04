@@ -111,8 +111,8 @@ void storeClientInfo(const ClientInfo& info) {
     char* errMsg = nullptr;
 
     // Construct the SQL query using placeholders (?)
-    string sql = "INSERT INTO clients (clientID, name, age, nationalID, mobileNum, email, balance) "
-                 "VALUES (?, ?, ?, ?, ?, ?, ?);";
+    string sql = "INSERT INTO clients (clientID, name, age, nationalID, mobileNum, balance) "
+                 "VALUES (?, ?, ?, ?, ?, ?);";
 
     // Prepare the SQL statement
     sqlite3_stmt* stmt;
@@ -126,10 +126,10 @@ void storeClientInfo(const ClientInfo& info) {
     sqlite3_bind_int(stmt, 1, info.clientID);
     sqlite3_bind_text(stmt, 2, info.name.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt, 3, info.age);
-    sqlite3_bind_text(stmt, 4, info.nationalID.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 5, info.mobileNum.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 6, info.email.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_double(stmt, 7, info.balance);
+    sqlite3_bind_double(stmt, 4, info.nationalID);
+    sqlite3_bind_double(stmt, 5, info.mobileNum);
+    // sqlite3_bind_text(stmt, 6, info.email.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_double(stmt, 6, info.balance);
 
     // Execute the statement
     rc = sqlite3_step(stmt);
@@ -160,35 +160,35 @@ void Server::handleConnection(int clientSocket) {
         cout << "Age = " << clientInfo.age << endl;
         cout << "Mobile Num = " << clientInfo.mobileNum << endl;
         cout << "NationalID = " << clientInfo.nationalID << endl;
-        cout << "email = " << clientInfo.email << endl;
+        // cout << "email = " << clientInfo.email << endl;
 
         storeClientInfo(clientInfo);
 
         cout << endl;
         cout << endl;
 
-        cout << "Attempting to getAccountBalance from DB" << endl;
-        double balance = getAccountBalance(clientInfo.clientID);
-        cout << "Current Balance in account = " << balance << endl;
-        cout << endl;
+        // cout << "Attempting to getAccountBalance from DB" << endl;
+        // double balance = getAccountBalance(clientInfo.clientID);
+        // cout << "Current Balance in account = " << balance << endl;
+        // cout << endl;
 
-        cout << "Attempting to Deposit money in wallet" << endl;
-        depositMoney(clientInfo.clientID, 5000.0);
-        balance = getAccountBalance(clientInfo.clientID);
-        cout << "Current Balance in account = " << balance << endl;
-        cout << endl;
+        // cout << "Attempting to Deposit money in wallet" << endl;
+        // depositMoney(clientInfo.clientID, 5000.0);
+        // balance = getAccountBalance(clientInfo.clientID);
+        // cout << "Current Balance in account = " << balance << endl;
+        // cout << endl;
 
-        cout << "Attempting to withdraw money available in wallet" << endl;
-        withdrawMoney(clientInfo.clientID, 2000.0);
-        balance = getAccountBalance(clientInfo.clientID);
-        cout << "Current Balance in account = " << balance << endl;
-        cout << endl;
+        // cout << "Attempting to withdraw money available in wallet" << endl;
+        // withdrawMoney(clientInfo.clientID, 2000.0);
+        // balance = getAccountBalance(clientInfo.clientID);
+        // cout << "Current Balance in account = " << balance << endl;
+        // cout << endl;
 
-        cout << "Attempting to withdraw money more than there in wallet" << endl;
-        withdrawMoney(clientInfo.clientID, 7000.0);
-        balance = getAccountBalance(clientInfo.clientID);
-        cout << "Current Balance in account = " << balance << endl;
-        cout << endl;
+        // cout << "Attempting to withdraw money more than there in wallet" << endl;
+        // withdrawMoney(clientInfo.clientID, 7000.0);
+        // balance = getAccountBalance(clientInfo.clientID);
+        // cout << "Current Balance in account = " << balance << endl;
+        // cout << endl;
 
         cout << "Attempting to displayClientInfo from DB" << endl;
         displayClientInfo(clientInfo.clientID);
@@ -272,9 +272,11 @@ ClientInfo Server::receiveClientInfo(int clientSocket){
 
     info.name = receiveString(clientSocket);
     receiveMember(clientSocket, info.age, "Error receiving Client's Age");
-    info.nationalID = receiveString(clientSocket);
-    info.mobileNum = receiveString(clientSocket);
-    info.email = receiveString(clientSocket);
+    // info.nationalID = receiveString(clientSocket);
+    receiveMember(clientSocket, info.nationalID, "Error receiving Client's NationalID");
+    receiveMember(clientSocket, info.mobileNum, "Error receiving Client's Mobile Number");
+    // info.mobileNum = receiveString(clientSocket);
+    // info.email = receiveString(clientSocket);
     info.balance = 0;
     cout << "End of receiveClientInfo" << endl;
     return info;
@@ -379,7 +381,35 @@ void Server::withdrawMoney(const int& clientID, double amount){
 
 
 void Server::processTransaction(const int& clientID, const Transaction& transaction){
+    // Check if the fromAccount is equal to clientID
+    if (transaction.fromAccount != std::to_string(clientID)) {
+        cerr << "Invalid transaction: fromAccount does not match clientID" << endl;
+        return;
+    }
 
+    // Check if the toAccount exists in the database
+    bool toAccountExists = checkClientExists(std::stoi(transaction.toAccount));
+    if (!toAccountExists) {
+        cerr << "Invalid transaction: toAccount does not exist" << endl;
+        return;
+    }
+
+    // Check if the amount required to be transferred is sufficient in the current user balance
+    double balance = getAccountBalance(clientID);
+    if (balance < transaction.amount) {
+        cerr << "Invalid transaction: insufficient balance" << endl;
+        return;
+    }
+
+    // Process the transaction
+    // For example, update the balances in the database
+    // Withdraw amount from the client's account
+    withdrawMoney(clientID, transaction.amount);
+
+    // Deposit amount to the recipient's account
+    depositMoney(std::stoi(transaction.toAccount), transaction.amount);
+
+    cout << "Transaction processed successfully" << endl;
 }
 
 void Server::undoTransaction(const int& clientID){
@@ -414,13 +444,13 @@ void Server::displayClientInfo(const int& clientID){
     }
 
     // Read the client information from the query result
-    int id = sqlite3_column_int(stmt, 0);
+    int id = sqlite3_column_int(stmt, 1);
     const unsigned char* name = sqlite3_column_text(stmt, 2);
     int age = sqlite3_column_int(stmt, 3);
-    const unsigned char* nationalID = sqlite3_column_text(stmt, 4);
-    const unsigned char* mobileNum = sqlite3_column_text(stmt, 5);
-    const unsigned char* email = sqlite3_column_text(stmt, 6);
-    double balance = sqlite3_column_double(stmt, 7);
+    double nationalID = sqlite3_column_double(stmt, 4);
+    double mobileNum = sqlite3_column_double(stmt, 5);
+    // const unsigned char* email = sqlite3_column_text(stmt, 6);
+    double balance = sqlite3_column_double(stmt, 6);
 
     // Print the client information
     cout << "Client ID: " << id << endl;
@@ -428,7 +458,7 @@ void Server::displayClientInfo(const int& clientID){
     cout << "Age: " << age << endl;
     cout << "National ID: " << nationalID << endl;
     cout << "Mobile Number: " << mobileNum << endl;
-    cout << "Email: " << email << endl;
+    // cout << "Email: " << email << endl;
     cout << "Balance: " << balance << endl;
 
     // Finalize the statement
@@ -437,8 +467,8 @@ void Server::displayClientInfo(const int& clientID){
 
 
 void initDatabase(){
-    int rc = sqlite3_open("wallet.db", &db);
 
+    int rc = sqlite3_open("wallet.db", &db);
     if (rc) {
         cerr << "Can't open database: " << sqlite3_errmsg(db) << endl;
         sqlite3_close(db);
@@ -450,9 +480,8 @@ void initDatabase(){
                   "clientID INTEGER UNIQUE,"
                   "name TEXT NOT NULL,"
                   "age INTEGER,"
-                  "nationalID TEXT,"
-                  "mobileNum TEXT,"
-                  "email TEXT,"
+                  "nationalID REAL,"
+                  "mobileNum REAL,"
                   "balance REAL"
                   ");";
     

@@ -80,13 +80,14 @@ void Client::sendClientInfo(const ClientInfo& info){
     send(clientSocket, &info.age, sizeof(info.age), 0);
 
     // Send national ID
-    sendString(clientSocket, info.nationalID);
+    send(clientSocket, &info.nationalID, sizeof(info.nationalID), 0);
 
     // Send mobile number
-    sendString(clientSocket, info.mobileNum);
+    // sendString(clientSocket, info.mobileNum);
+    send(clientSocket, &info.mobileNum, sizeof(info.mobileNum), 0);
 
     // Send email
-    sendString(clientSocket, info.email);
+    // sendString(clientSocket, info.email);
 }
 
 void Client::depositMoney(double amount){
@@ -121,12 +122,12 @@ int main() {
     client.connectToServer(SERVERADDR, PORT);
 
     ClientInfo info;
-    info.clientID = 2000;
-    info.name = "Ahmed Essam";
+    info.clientID = 5555;
+    info.name = "AhmedEssam";
     info.age = 23;
-    info.nationalID = "30010060100217";
-    info.mobileNum = "01111168909";
-    info.email = "ahmedessam020@gmail.com";
+    info.nationalID = 30010060100217;
+    info.mobileNum = 1111168909;
+    // info.email = "ahmedessam020@gmail.com";
 
     client.sendClientInfo(info);
     cout << "Sent client info" << endl;

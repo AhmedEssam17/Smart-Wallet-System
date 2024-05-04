@@ -12,9 +12,9 @@ struct ClientInfo {
     int clientID;
     std::string name;
     int age;
-    std::string nationalID;
-    std::string mobileNum;
-    std::string email;
+    double nationalID;
+    double mobileNum;
+    // std::string email;
     double balance;
 };
 
