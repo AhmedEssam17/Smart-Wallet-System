@@ -190,6 +190,9 @@ void Server::handleConnection(int clientSocket) {
         cout << "Current Balance in account = " << balance << endl;
         cout << endl;
 
+        cout << "Attempting to displayClientInfo from DB" << endl;
+        displayClientInfo(clientInfo.clientID);
+
 
         while(true){
 
@@ -216,7 +219,7 @@ string receiveString(int clientSocket) {
     receiveMember(clientSocket, len, "Error receiving string length");
 
     if (len >= MAX_STRING_SIZE) {
-        cerr << "String length exceeds buffer size" << endl;
+        cerr << "String length exceeds buffer size: "<< len << endl;
         close(clientSocket);
         return "";
     }
@@ -227,16 +230,52 @@ string receiveString(int clientSocket) {
     return std::string(buffer, len);
 }
 
+bool checkClientExists(const int& clientID) {
+    char* errMsg = nullptr;
+    string sql = "SELECT EXISTS(SELECT 1 FROM clients WHERE clientID = ? LIMIT 1);";
+    
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        cerr << "SQL prepare error: " << sqlite3_errmsg(db) << endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, clientID);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        cerr << "SQL execute error: " << sqlite3_errmsg(db) << endl;
+        return false;
+    }
+
+    bool exists = sqlite3_column_int(stmt, 0) != 0;
+
+    sqlite3_finalize(stmt);
+
+    return exists;
+}
+
 ClientInfo Server::receiveClientInfo(int clientSocket){
     ClientInfo info;
     cout << "Inside receiveClientInfo" << endl;
     receiveMember(clientSocket, info.clientID, "Error receiving Client's ID");
+
+    // // Check if the clientID already exists in the database
+    // bool clientExists = checkClientExists(info.clientID);
+    // if (clientExists) {
+    //     cerr << "Client with ID " << info.clientID << " already exists." << endl;
+    //     // Handle the situation, e.g., reject the client info or update the existing record
+    //     // For now, let's just return an empty info
+    //     return info;
+    // }
+
     info.name = receiveString(clientSocket);
     receiveMember(clientSocket, info.age, "Error receiving Client's Age");
     info.nationalID = receiveString(clientSocket);
     info.mobileNum = receiveString(clientSocket);
     info.email = receiveString(clientSocket);
-    info.balance = 0.0;
+    info.balance = 0;
     cout << "End of receiveClientInfo" << endl;
     return info;
 }
@@ -352,8 +391,50 @@ void Server::redoTransaction(const int& clientID){
 }
 
 void Server::displayClientInfo(const int& clientID){
+    // Construct the SQL query
+    string sql = "SELECT * FROM clients WHERE clientID = ?;";
 
+    // Prepare the SQL statement
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        cerr << "SQL prepare error: " << sqlite3_errmsg(db) << endl;
+        return;
+    }
+
+    // Bind parameters to the statement
+    sqlite3_bind_int(stmt, 1, clientID);
+
+    // Execute the statement
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        cerr << "Client with ID " << clientID << " not found." << endl;
+        sqlite3_finalize(stmt);
+        return;
+    }
+
+    // Read the client information from the query result
+    int id = sqlite3_column_int(stmt, 0);
+    const unsigned char* name = sqlite3_column_text(stmt, 2);
+    int age = sqlite3_column_int(stmt, 3);
+    const unsigned char* nationalID = sqlite3_column_text(stmt, 4);
+    const unsigned char* mobileNum = sqlite3_column_text(stmt, 5);
+    const unsigned char* email = sqlite3_column_text(stmt, 6);
+    double balance = sqlite3_column_double(stmt, 7);
+
+    // Print the client information
+    cout << "Client ID: " << id << endl;
+    cout << "Name: " << name << endl;
+    cout << "Age: " << age << endl;
+    cout << "National ID: " << nationalID << endl;
+    cout << "Mobile Number: " << mobileNum << endl;
+    cout << "Email: " << email << endl;
+    cout << "Balance: " << balance << endl;
+
+    // Finalize the statement
+    sqlite3_finalize(stmt);
 }
+
 
 void initDatabase(){
     int rc = sqlite3_open("wallet.db", &db);
@@ -366,7 +447,7 @@ void initDatabase(){
 
     const char* sql = "CREATE TABLE IF NOT EXISTS clients ("
                   "id INTEGER PRIMARY KEY,"
-                  "clientID INTEGER,"
+                  "clientID INTEGER UNIQUE,"
                   "name TEXT NOT NULL,"
                   "age INTEGER,"
                   "nationalID TEXT,"

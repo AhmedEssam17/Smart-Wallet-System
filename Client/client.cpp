@@ -121,7 +121,7 @@ int main() {
     client.connectToServer(SERVERADDR, PORT);
 
     ClientInfo info;
-    info.clientID = 8888;
+    info.clientID = 2000;
     info.name = "Ahmed Essam";
     info.age = 23;
     info.nationalID = "30010060100217";
