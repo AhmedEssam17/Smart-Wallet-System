@@ -113,8 +113,8 @@ double Client::getAccountBalance(){
     return balance;
 }
 
-void Client::sendTransaction(const Transaction& transaction){
-
+void Client::sendTransaction(const Transaction& transaction) {
+    send(clientSocket, &transaction, sizeof(transaction), 0);
 }
 
 void Client::undoTransaction(){

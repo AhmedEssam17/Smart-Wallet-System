@@ -38,6 +38,8 @@ private:
     void handleConnection(int clientSocket);
     ClientInfo receiveClientInfo(int clientSocket);
 
+    std::vector<Transaction> transactionHistory;
+
     // map<string, ClientInfo> m_clientInfo;
     // map<string, double> m_accountBalances;
     // map<string, vector<Transaction>> m_transactions;
@@ -192,8 +194,8 @@ void Server::handleConnection(int clientSocket) {
         // cout << "Current Balance in account = " << balance << endl;
         // cout << endl;
 
-        cout << "Attempting to displayClientInfo from DB" << endl;
-        displayClientInfo(clientInfo.clientID);
+        // cout << "Attempting to displayClientInfo from DB" << endl;
+        // displayClientInfo(clientInfo.clientID);
 
 
         while(true){
@@ -205,32 +207,6 @@ void Server::handleConnection(int clientSocket) {
         cerr << "Error in handling client connection: " << e.what() << endl;
     }
 }
-
-// template <typename T>
-// void receiveMember(int clientSocket, T& member, const char* errorMessage) {
-//     int bytesRecv = recv(clientSocket, &member, sizeof(member), 0);
-//     if (bytesRecv < 0) {
-//         cerr << errorMessage << endl;
-//         close(clientSocket);
-//         return;
-//     }
-// }
-
-// string receiveString(int clientSocket) {
-//     int len;
-//     receiveMember(clientSocket, len, "Error receiving string length");
-
-//     if (len >= MAX_STRING_SIZE) {
-//         cerr << "String length exceeds buffer size: "<< len << endl;
-//         close(clientSocket);
-//         return "";
-//     }
-
-//     char buffer[MAX_STRING_SIZE];
-//     receiveMember(clientSocket, buffer, "Error receiving string data");
-
-//     return std::string(buffer, len);
-// }
 
 bool checkClientExists(const int& clientID) {
     char* errMsg = nullptr;
@@ -257,38 +233,6 @@ bool checkClientExists(const int& clientID) {
 
     return exists;
 }
-
-// ClientInfo Server::receiveClientInfo(int clientSocket){
-//     ClientInfo info;
-//     cout << "Inside receiveClientInfo" << endl;
-//     receiveMember(clientSocket, info.clientID, "Error receiving Client's ID");
-
-//     // // Check if the clientID already exists in the database
-//     // bool clientExists = checkClientExists(info.clientID);
-//     // if (clientExists) {
-//     //     cerr << "Client with ID " << info.clientID << " already exists." << endl;
-//     //     // Handle the situation, e.g., reject the client info or update the existing record
-//     //     // For now, let's just return an empty info
-//     //     return info;
-//     // }
-
-//     info.name = receiveString(clientSocket);
-//     receiveMember(clientSocket, info.age, "Error receiving Client's Age");
-//     info.nationalID = receiveString(clientSocket);
-//     // receiveMember(clientSocket, info.nationalID, "Error receiving Client's NationalID");
-//     // receiveMember(clientSocket, info.mobileNum, "Error receiving Client's Mobile Number");
-//     info.mobileNum = receiveString(clientSocket);
-//     info.email = receiveString(clientSocket);
-//     info.balance = 0;
-//     cout << "End of receiveClientInfo" << endl;
-//     return info;
-// }
-
-// ClientInfo deserializeClientInfo(const std::vector<char>& data) {
-//     ClientInfo clientInfo;
-//     memcpy(&clientInfo, data.data(), sizeof(ClientInfo));
-//     return clientInfo;
-// }
 
 ClientInfo Server::receiveClientInfo(int clientSocket) {
     ClientInfo info;
@@ -393,45 +337,64 @@ void Server::withdrawMoney(const int& clientID, double amount){
     sqlite3_finalize(stmt);
 }
 
+void Server::processTransaction(const int& clientID, const Transaction& transaction){
+    // Check if the fromAccount is equal to clientID
+    if (transaction.fromAccount != clientID) {
+        cerr << "Invalid transaction: fromAccount does not match clientID" << endl;
+        return;
+    }
 
-// void Server::processTransaction(const int& clientID, const Transaction& transaction){
-//     // Check if the fromAccount is equal to clientID
-//     if (transaction.fromAccount != std::to_string(clientID)) {
-//         cerr << "Invalid transaction: fromAccount does not match clientID" << endl;
-//         return;
-//     }
+    // Check if the toAccount exists in the database
+    bool toAccountExists = checkClientExists(transaction.toAccount);
+    if (!toAccountExists) {
+        cerr << "Invalid transaction: toAccount does not exist" << endl;
+        return;
+    }
 
-//     // Check if the toAccount exists in the database
-//     bool toAccountExists = checkClientExists(std::stoi(transaction.toAccount));
-//     if (!toAccountExists) {
-//         cerr << "Invalid transaction: toAccount does not exist" << endl;
-//         return;
-//     }
+    // Check if the amount required to be transferred is sufficient in the current user balance
+    double balance = getAccountBalance(clientID);
+    if (balance < transaction.amount) {
+        cerr << "Invalid transaction: insufficient balance" << endl;
+        return;
+    }
 
-//     // Check if the amount required to be transferred is sufficient in the current user balance
-//     double balance = getAccountBalance(clientID);
-//     if (balance < transaction.amount) {
-//         cerr << "Invalid transaction: insufficient balance" << endl;
-//         return;
-//     }
+    // Process the transaction
+    // For example, update the balances in the database
+    // Withdraw amount from the client's account
+    withdrawMoney(clientID, transaction.amount);
 
-//     // Process the transaction
-//     // For example, update the balances in the database
-//     // Withdraw amount from the client's account
-//     withdrawMoney(clientID, transaction.amount);
+    // Deposit amount to the recipient's account
+    depositMoney(transaction.toAccount, transaction.amount);
 
-//     // Deposit amount to the recipient's account
-//     depositMoney(std::stoi(transaction.toAccount), transaction.amount);
+    cout << "Transaction processed successfully" << endl;
 
-//     cout << "Transaction processed successfully" << endl;
-// }
+    transactionHistory.push_back(transaction);
+}
 
 void Server::undoTransaction(const int& clientID){
+    if (!transactionHistory.empty()) {
+        // Undo the last transaction
+        Transaction lastTransaction = transactionHistory.back();
+        depositMoney(lastTransaction.fromAccount, lastTransaction.amount);
+        withdrawMoney(lastTransaction.toAccount, lastTransaction.amount);
 
+        // Remove the last transaction from history
+        transactionHistory.pop_back();
+
+        cout << "Transaction undone successfully" << endl;
+    } else {
+        cout << "No transaction to undo" << endl;
+    }
 }
 
 void Server::redoTransaction(const int& clientID){
 
+}
+
+Transaction Server::receiveTransaction(int clientSocket) {
+    Transaction transaction;
+    recv(clientSocket, &transaction, sizeof(transaction), 0);
+    return transaction;
 }
 
 void Server::displayClientInfo(const int& clientID){
