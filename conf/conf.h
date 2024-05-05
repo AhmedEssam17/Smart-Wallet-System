@@ -16,3 +16,17 @@ struct Transaction {
     int toAccount;
     double amount;
 };
+
+enum ACTIONS { 
+    LOGIN = 1,
+    REGISTER,
+    DISPLAYINFO,
+    BALANCE,
+    DEPOSIT,
+    WITHDRAW,
+    TRANSACTION,
+    UNDO,
+    REDO
+};
+
+ACTIONS actions;
