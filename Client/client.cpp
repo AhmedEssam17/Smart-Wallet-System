@@ -262,6 +262,7 @@ int main() {
             iss >> name >> age >> mobileNum >> nationalID >> email >> balance;
 
             ClientInfo info;
+            info.clientID = clientID;
             strcpy(info.name, name.c_str());
             info.age = std::stoi(age);
             strcpy(info.mobileNum, mobileNum.c_str());
