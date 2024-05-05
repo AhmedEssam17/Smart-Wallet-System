@@ -22,9 +22,9 @@ public:
     void start();
     void stop();
 
-    double getAccountBalance(const int& clientID);
-    void depositMoney(const int& clientID, double amount);
-    void withdrawMoney(const int& clientID, double amount);
+    int getAccountBalance(const int& clientID);
+    void depositMoney(const int& clientID, int amount);
+    void withdrawMoney(const int& clientID, int amount);
     void processTransaction(const int& clientID, const Transaction& transaction);
     void undoTransaction(const int& clientID);
     void redoTransaction(const int& clientID);
@@ -133,7 +133,7 @@ void storeClientInfo(const ClientInfo& info) {
     sqlite3_bind_text(stmt, 4, info.nationalID, strlen(info.nationalID), SQLITE_STATIC);
     sqlite3_bind_text(stmt, 5, info.mobileNum, strlen(info.mobileNum), SQLITE_STATIC);
     sqlite3_bind_text(stmt, 6, info.email, strlen(info.email), SQLITE_STATIC);
-    sqlite3_bind_double(stmt, 7, info.balance);
+    sqlite3_bind_int(stmt, 7, info.balance);
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
@@ -189,7 +189,7 @@ void Server::handleConnection(int clientSocket) {
 
         int action = 0;
         int networkAmount;
-        double amount;
+        int amount;
         ClientInfo clientInfo;
 
         while(true){
@@ -284,8 +284,8 @@ void Server::receiveClientInfo(int clientSocket) {
     storeClientInfo(info);
 }
 
-double Server::getAccountBalance(const int& clientID){
-    double balance = 0.0;
+int Server::getAccountBalance(const int& clientID){
+    int balance = 0.0;
     char* errMsg = nullptr;
 
     // Construct the SQL query to select the balance for the given clientID
@@ -305,7 +305,7 @@ double Server::getAccountBalance(const int& clientID){
     // Execute the statement
     rc = sqlite3_step(stmt);
     if (rc == SQLITE_ROW) {
-        balance = sqlite3_column_double(stmt, 0);
+        balance = sqlite3_column_int(stmt, 0);
     }
 
     // Finalize the statement
@@ -314,12 +314,12 @@ double Server::getAccountBalance(const int& clientID){
     return balance;
 }
 
-void Server::depositMoney(const int& clientID, double amount){
+void Server::depositMoney(const int& clientID, int amount){
 
     cout << "Deposit amount = " << amount << endl;
 
-    double currentBalance = getAccountBalance(clientID);
-    double newBalance = currentBalance + amount;
+    int currentBalance = getAccountBalance(clientID);
+    int newBalance = currentBalance + amount;
 
     char* errMsg = nullptr;
 
@@ -335,7 +335,7 @@ void Server::depositMoney(const int& clientID, double amount){
     }
 
     // Bind parameters to the statement
-    sqlite3_bind_double(stmt, 1, newBalance);
+    sqlite3_bind_int(stmt, 1, newBalance);
     sqlite3_bind_int(stmt, 2, clientID);
 
     // Execute the statement
@@ -348,9 +348,9 @@ void Server::depositMoney(const int& clientID, double amount){
     sqlite3_finalize(stmt);
 }
 
-void Server::withdrawMoney(const int& clientID, double amount){
-    double currentBalance = getAccountBalance(clientID);
-    double newBalance = currentBalance - amount;
+void Server::withdrawMoney(const int& clientID, int amount){
+    int currentBalance = getAccountBalance(clientID);
+    int newBalance = currentBalance - amount;
 
     if (newBalance < 0) {
         cerr << "Insufficient balance" << endl;
@@ -371,7 +371,7 @@ void Server::withdrawMoney(const int& clientID, double amount){
     }
 
     // Bind parameters to the statement
-    sqlite3_bind_double(stmt, 1, newBalance);
+    sqlite3_bind_int(stmt, 1, newBalance);
     sqlite3_bind_int(stmt, 2, clientID);
 
     // Execute the statement
@@ -399,7 +399,7 @@ void Server::processTransaction(const int& clientID, const Transaction& transact
     }
 
     // Check if the amount required to be transferred is sufficient in the current user balance
-    double balance = getAccountBalance(clientID);
+    int balance = getAccountBalance(clientID);
     if (balance < transaction.amount) {
         cerr << "Invalid transaction: insufficient balance" << endl;
         return;
@@ -511,7 +511,7 @@ ClientInfo Server::displayClientInfo(const int& clientID){
     const unsigned char* nationalID = sqlite3_column_text(stmt, 4);
     const unsigned char* mobileNum = sqlite3_column_text(stmt, 5);
     const unsigned char* email = sqlite3_column_text(stmt, 6);
-    double balance = sqlite3_column_double(stmt, 7);
+    int balance = sqlite3_column_int(stmt, 7);
 
     // Print the client information
     cout << "Client ID: " << id << endl;
@@ -556,7 +556,7 @@ void initDatabase(){
                   "nationalID TEXT,"
                   "mobileNum TEXT,"
                   "email TEXT,"
-                  "balance REAL"
+                  "balance INTEGER"
                   ");";
     
     rc = sqlite3_exec(db, clientSql, nullptr, nullptr, nullptr);

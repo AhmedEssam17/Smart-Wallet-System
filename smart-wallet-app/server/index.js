@@ -39,7 +39,6 @@ app.post('/api/login', (req, res) => {
 // Register route
 app.post('/api/register', (req, res) => {
     const { clientID, password, clientInfo } = req.body;
-    // Convert clientInfo to a string that can be parsed by the C++ client
     const infoString = `${clientInfo.name} ${clientInfo.age} ${clientInfo.mobileNum} ${clientInfo.nationalID} ${clientInfo.email} ${clientInfo.balance}`;
     client.write(`register ${clientID} ${password} ${infoString}\n`);
 

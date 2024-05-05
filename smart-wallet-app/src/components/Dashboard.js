@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import axios from 'axios';
 
 function Dashboard({ clientID }) {
+    console.log(clientID)
   const [balance, setBalance] = useState(0);
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(0);
 
   const fetchBalance = async () => {
     try {
@@ -16,9 +17,10 @@ function Dashboard({ clientID }) {
 
   const handleDeposit = async () => {
     try {
+        console.log('amount is, ',amount)
       await axios.post('http://localhost:5000/api/deposit', { clientID, amount });
       fetchBalance();
-      setAmount('');
+      setAmount(0);
     } catch (error) {
       console.error('Error depositing money:', error);
     }
@@ -42,7 +44,10 @@ function Dashboard({ clientID }) {
         <p>Balance: {balance}</p>
       </div>
       <div className="mb-3">
-        <input type="number" className="form-control" placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} />
+        <input type="number" className="form-control" placeholder="Amount" value={amount} onChange={e => {
+            console.log(e.target.value)
+            return setAmount(e.target.value)
+            }} />
       </div>
       <div className="mb-3">
         <button className="btn btn-success" onClick={handleDeposit}>Deposit Money</button>

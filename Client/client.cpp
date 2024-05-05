@@ -19,9 +19,9 @@ public:
 
     void connectToServer(const string& serverAddress, int port);
     void sendClientInfo(const ClientInfo& info);
-    void depositMoney(const int& clientID, double amount);
-    void withdrawMoney(const int& clientID, double amount);
-    double getAccountBalance(const int& clientID);
+    void depositMoney(const int& clientID, int amount);
+    void withdrawMoney(const int& clientID, int amount);
+    int getAccountBalance(const int& clientID);
     void sendTransaction(const Transaction& transaction);
     void undoTransaction();
     void redoTransaction();
@@ -73,29 +73,29 @@ void Client::sendClientInfo(const ClientInfo& clientInfo) {
     send(clientSocket, &clientInfo, sizeof(clientInfo), 0);
 }
 
-void Client::depositMoney(const int& clientID, double amount){
+void Client::depositMoney(const int& clientID, int amount){
     action = DEPOSIT;
     send(clientSocket, &action, sizeof(action), 0);
 
-    int networkAmount = htonl((int)amount);
+    int networkAmount = htonl(amount);
 
     send(clientSocket, &networkAmount, sizeof(networkAmount), 0);
 }
 
-void Client::withdrawMoney(const int& clientID, double amount){
+void Client::withdrawMoney(const int& clientID, int amount){
     action = WITHDRAW;
     send(clientSocket, &action, sizeof(action), 0);
     cout << "amount = "<< amount << endl;
-    int networkAmount = htonl((int)amount);
+    int networkAmount = htonl(amount);
     cout << "networkAmount = "<< networkAmount << endl;
     send(clientSocket, &networkAmount, sizeof(networkAmount), 0);
 }
 
-double Client::getAccountBalance(const int& clientID){
+int Client::getAccountBalance(const int& clientID){
     action = BALANCE;
     send(clientSocket, &action, sizeof(action), 0);
 
-    double balance;
+    int balance;
     recv(clientSocket, &balance, sizeof(balance), 0);
 
     return balance;
@@ -249,27 +249,49 @@ int main() {
         if (cmd == "login") {
             int clientID, password;
             iss >> clientID >> password;
+            cout << "Received command: " << cmd << endl;
+            cout << "clientID: " << clientID << endl;
+            cout << "password: " << password << endl;
             client.clientLogin(clientID, password);
         } else if (cmd == "register") {
-            int clientID, password;
+            int clientID;
+            int password;
             iss >> clientID >> password;
-            // Assuming clientInfo is passed somehow or hardcoded for simplicity
-            ClientInfo info = {/* initialize fields */};
+
+            std::string name, age, mobileNum, nationalID, email, balance;
+            iss >> name >> age >> mobileNum >> nationalID >> email >> balance;
+
+            ClientInfo info;
+            strcpy(info.name, name.c_str());
+            info.age = std::stoi(age);
+            strcpy(info.mobileNum, mobileNum.c_str());
+            strcpy(info.nationalID, nationalID.c_str());
+            strcpy(info.email, email.c_str());
+            info.balance = std::stoi(balance);
+
             client.clientRegister(clientID, password, info);
         } else if (cmd == "balance") {
             int clientID;
             iss >> clientID;
-            double balance = client.getAccountBalance(clientID);
+            cout << "Received command: " << cmd << endl;
+            cout << "clientID: " << clientID << endl;
+            int balance = client.getAccountBalance(clientID);
             // Send balance back to Node.js server if needed
         } else if (cmd == "deposit") {
             int clientID;
-            double amount;
+            int amount;
+            cout << "Received command: " << cmd << endl;
             iss >> clientID >> amount;
-            client.depositMoney(clientID, amount);
+            cout << "clientID: " << clientID << endl;
+            cout << "amount: " << amount << endl;
+            // client.depositMoney(clientID, amount);
         } else if (cmd == "withdraw") {
             int clientID;
-            double amount;
+            int amount;
+            cout << "Received command: " << cmd << endl;
             iss >> clientID >> amount;
+            cout << "clientID: " << clientID << endl;
+            cout << "amount: " << amount << endl;
             client.withdrawMoney(clientID, amount);
         }
         // Add more commands as needed

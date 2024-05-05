@@ -8,13 +8,13 @@ struct ClientInfo {
     char nationalID[20];
     char mobileNum[15];
     char email[40];
-    double balance;
+    int balance;
 };
 
 struct Transaction {
     int fromAccount;
     int toAccount;
-    double amount;
+    int amount;
 };
 
 enum ACTIONS { 
