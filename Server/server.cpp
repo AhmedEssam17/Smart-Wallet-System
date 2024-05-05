@@ -211,6 +211,7 @@ void Server::handleConnection(int clientSocket) {
                 break;
                 case BALANCE:
                     cout << "Client Attempting getAccountBalance()" << endl;
+                    cout << "getAccountBalance >> clientInfo.clientID = " << clientInfo.clientID << endl;
                     clientInfo.balance = getAccountBalance(clientInfo.clientID);
                     send(clientSocket, &clientInfo.balance, sizeof(clientInfo.balance), 0);
                 break;
@@ -285,7 +286,7 @@ void Server::receiveClientInfo(int clientSocket) {
 }
 
 int Server::getAccountBalance(const int& clientID){
-    int balance = 0.0;
+    int balance = 0;
     char* errMsg = nullptr;
 
     // Construct the SQL query to select the balance for the given clientID

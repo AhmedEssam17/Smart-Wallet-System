@@ -277,7 +277,9 @@ int main() {
             cout << "Received command: " << cmd << endl;
             cout << "clientID: " << clientID << endl;
             int balance = client.getAccountBalance(clientID);
-            // Send balance back to Node.js server if needed
+            cout << "After getAccountBalance >> Balance = " << balance << endl;
+            std::string balanceStr = std::to_string(balance);
+            send(new_socket, balanceStr.c_str(), balanceStr.size(), 0);
         } else if (cmd == "deposit") {
             int clientID;
             int amount;
@@ -285,7 +287,7 @@ int main() {
             iss >> clientID >> amount;
             cout << "clientID: " << clientID << endl;
             cout << "amount: " << amount << endl;
-            // client.depositMoney(clientID, amount);
+            client.depositMoney(clientID, amount);
         } else if (cmd == "withdraw") {
             int clientID;
             int amount;

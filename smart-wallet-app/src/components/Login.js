@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 
-function Login({ onLoginSuccess }) {
+function Login() {
   const [clientID, setClientID] = useState('');
   const [password, setPassword] = useState('');
+  const navigate = useNavigate();
 
   const handleLogin = async () => {
     try {
+      localStorage.setItem('clientID', clientID);
       const response = await axios.post('http://localhost:5000/api/login', { clientID, password });
-      onLoginSuccess(response.data);
+      navigate('/dashboard'); // Redirect to Dashboard
     } catch (error) {
       console.error('Login failed:', error);
     }

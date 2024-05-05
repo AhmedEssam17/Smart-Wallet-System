@@ -50,10 +50,17 @@ app.post('/api/register', (req, res) => {
 // Balance route
 app.get('/api/balance/:clientID', (req, res) => {
     const { clientID } = req.params;
+    console.log(`Request for balance received for clientID: ${clientID}`); // Log clientID
     client.write(`balance ${clientID}\n`);
 
     client.once('data', (data) => {
+        console.log(`Received data from TCP client: ${data.toString()}`); // Log received data
         res.send({ balance: data.toString() });
+    });
+
+    client.on('error', (error) => {
+        console.error('TCP Error:', error);
+        res.status(500).send('Error in TCP communication');
     });
 });
 
