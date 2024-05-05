@@ -37,6 +37,8 @@ private:
     void listenForConnections();
     void handleConnection(int clientSocket);
     ClientInfo receiveClientInfo(int clientSocket);
+    Transaction receiveTransaction(int clientSocket);
+    int verifyClient(int clientSocket);
 
     std::vector<Transaction> transactionHistory;
 
@@ -113,11 +115,9 @@ void Server::listenForConnections() {
 void storeClientInfo(const ClientInfo& info) {
     char* errMsg = nullptr;
 
-    // Construct the SQL query using placeholders (?)
     string sql = "INSERT INTO clients (clientID, name, age, nationalID, mobileNum, email, balance) "
                  "VALUES (?, ?, ?, ?, ?, ?, ?);";
 
-    // Prepare the SQL statement
     sqlite3_stmt* stmt;
     int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
     if (rc != SQLITE_OK) {
@@ -125,7 +125,6 @@ void storeClientInfo(const ClientInfo& info) {
         return;
     }
 
-    // Bind parameters to the statement
     sqlite3_bind_int(stmt, 1, info.clientID);
     sqlite3_bind_text(stmt, 2, info.name, strlen(info.name), SQLITE_STATIC);
     sqlite3_bind_int(stmt, 3, info.age);
@@ -134,7 +133,6 @@ void storeClientInfo(const ClientInfo& info) {
     sqlite3_bind_text(stmt, 6, info.email, strlen(info.email), SQLITE_STATIC);
     sqlite3_bind_double(stmt, 7, info.balance);
 
-    // Execute the statement
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
         cerr << "SQL execute error: " << sqlite3_errmsg(db) << endl;
@@ -142,11 +140,17 @@ void storeClientInfo(const ClientInfo& info) {
         cout << "Client's Data is stored in the Database Successfully" << endl;
     }
 
-    // Finalize the statement
     sqlite3_finalize(stmt);
 }
 
-
+int Server::verifyClient(int clientSocket){
+    int clientID;
+    recv(clientSocket, &clientID, sizeof(clientID), 0);
+    int password;
+    recv(clientSocket, &password, sizeof(password), 0);
+    cout << "Client Logged in Successfully" << endl;
+    return clientID;
+}
 
 void Server::handleConnection(int clientSocket) {
     try {
@@ -155,21 +159,32 @@ void Server::handleConnection(int clientSocket) {
             return;
         }
 
-        // Receive client info
-        ClientInfo clientInfo = receiveClientInfo(clientSocket);
-        cout << "ClientInfo received Successfully" << endl;
-        cout << "ID = " << clientInfo.clientID << endl;
-        cout << "Name = " << clientInfo.name << endl;
-        cout << "Age = " << clientInfo.age << endl;
-        cout << "Mobile Num = " << clientInfo.mobileNum << endl;
-        cout << "NationalID = " << clientInfo.nationalID << endl;
-        cout << "Balance = " << clientInfo.balance << endl;
-        // cout << "email = " << clientInfo.email << endl;
+        cout << "Client is attempting to login" << endl;
+        int clientID = verifyClient(clientSocket);
 
-        storeClientInfo(clientInfo);
+        cout << "Client is attempting to do a transaction" << endl;
+        Transaction transaction;
+        transaction.fromAccount = clientID;
+        transaction.toAccount = 5555;
+        transaction.amount = 2000;
+        processTransaction(clientID, transaction);
+        cout << "Finished Transaction" << endl;
 
-        cout << endl;
-        cout << endl;
+        // // Receive client info
+        // ClientInfo clientInfo = receiveClientInfo(clientSocket);
+        // cout << "ClientInfo received Successfully" << endl;
+        // cout << "ID = " << clientInfo.clientID << endl;
+        // cout << "Name = " << clientInfo.name << endl;
+        // cout << "Age = " << clientInfo.age << endl;
+        // cout << "Mobile Num = " << clientInfo.mobileNum << endl;
+        // cout << "NationalID = " << clientInfo.nationalID << endl;
+        // cout << "Balance = " << clientInfo.balance << endl;
+        // // cout << "email = " << clientInfo.email << endl;
+
+        // storeClientInfo(clientInfo);
+
+        // cout << endl;
+        // cout << endl;
 
         // cout << "Attempting to getAccountBalance from DB" << endl;
         // double balance = getAccountBalance(clientInfo.clientID);
