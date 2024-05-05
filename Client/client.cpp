@@ -7,6 +7,7 @@
 #include <vector>
 #include <map>
 #include "../conf/conf.h"
+#include <sstream>
 using namespace std;
 
 int action;
@@ -18,9 +19,9 @@ public:
 
     void connectToServer(const string& serverAddress, int port);
     void sendClientInfo(const ClientInfo& info);
-    void depositMoney(double amount);
-    void withdrawMoney(double amount);
-    double getAccountBalance();
+    void depositMoney(const int& clientID, double amount);
+    void withdrawMoney(const int& clientID, double amount);
+    double getAccountBalance(const int& clientID);
     void sendTransaction(const Transaction& transaction);
     void undoTransaction();
     void redoTransaction();
@@ -72,21 +73,25 @@ void Client::sendClientInfo(const ClientInfo& clientInfo) {
     send(clientSocket, &clientInfo, sizeof(clientInfo), 0);
 }
 
-void Client::depositMoney(double amount){
+void Client::depositMoney(const int& clientID, double amount){
     action = DEPOSIT;
     send(clientSocket, &action, sizeof(action), 0);
 
-    send(clientSocket, &amount, sizeof(amount), 0);
+    int networkAmount = htonl((int)amount);
+
+    send(clientSocket, &networkAmount, sizeof(networkAmount), 0);
 }
 
-void Client::withdrawMoney(double amount){
+void Client::withdrawMoney(const int& clientID, double amount){
     action = WITHDRAW;
     send(clientSocket, &action, sizeof(action), 0);
-
-    send(clientSocket, &amount, sizeof(amount), 0);
+    cout << "amount = "<< amount << endl;
+    int networkAmount = htonl((int)amount);
+    cout << "networkAmount = "<< networkAmount << endl;
+    send(clientSocket, &networkAmount, sizeof(networkAmount), 0);
 }
 
-double Client::getAccountBalance(){
+double Client::getAccountBalance(const int& clientID){
     action = BALANCE;
     send(clientSocket, &action, sizeof(action), 0);
 
@@ -117,8 +122,14 @@ void Client::clientLogin(const int& clientID, const int& password){
     action = LOGIN;
     send(clientSocket, &action, sizeof(action), 0);
 
-    send(clientSocket, &clientID, sizeof(clientID), 0);
-    send(clientSocket, &password, sizeof(password), 0);
+    int networkClientID = htonl(clientID);
+    int networkPassword = htonl(password);
+
+    cout << "clientID " << clientID << endl;
+    cout << "password " << password << endl;
+
+    send(clientSocket, &networkClientID, sizeof(networkClientID), 0);
+    send(clientSocket, &networkPassword, sizeof(networkPassword), 0);
 }
 
 void Client::clientRegister(const int& clientID, const int& password, const ClientInfo& info){
@@ -150,82 +161,119 @@ void printInfo(const ClientInfo& clientInfo){
     cout << "email = " << clientInfo.email << endl;
 }
 
+// int main(int argc, char* argv[]) {
+//     Client client;
+//     client.connectToServer(SERVERADDR, PORT);
+
+//     if (argc > 1) {
+//         std::string command = argv[1];
+//         if (command == "--login" && argc == 4) {
+//             int clientID = std::stoi(argv[2]);
+//             int password = std::stoi(argv[3]);
+//             client.clientLogin(clientID, password);
+//         } else if (command == "--register" && argc == 4) {
+//             int clientID = std::stoi(argv[2]);
+//             int password = std::stoi(argv[3]);
+//             // Assuming clientInfo is passed somehow or hardcoded for simplicity
+//             ClientInfo info = {/* initialize fields */};
+//             client.clientRegister(clientID, password, info);
+//         } else if (command == "--balance" && argc == 3) {
+//             int clientID = std::stoi(argv[2]);
+//             std::cout << client.getAccountBalance(clientID);
+//         } else if (command == "--deposit" && argc == 4) {
+//             int clientID = std::stoi(argv[2]);
+//             double amount = std::stod(argv[3]);
+//             client.depositMoney(clientID, amount);
+//         } else if (command == "--withdraw" && argc == 4) {
+//             int clientID = std::stoi(argv[2]);
+//             double amount = std::stod(argv[3]);
+//             client.withdrawMoney(clientID, amount);
+//         }
+//         // Add more commands as needed
+//     }
+
+//     return 0;
+// }
+
 int main() {
-    cout << "Client" << endl;
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int opt = 1;
+    int addrlen = sizeof(address);
+    char buffer[1024] = {0};
+
+    // Creating socket file descriptor
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Forcefully attaching socket to the port 8080
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(8080);
+
+    // Bind the socket to the address
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(server_fd, 3) < 0) {
+        perror("listen");
+        exit(EXIT_FAILURE);
+    }
+
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+        perror("accept");
+        exit(EXIT_FAILURE);
+    }
 
     Client client;
     client.connectToServer(SERVERADDR, PORT);
 
-    ClientInfo info;
-    info.clientID = 7777;
-    strcpy(info.name, "AhmedEssam");
-    info.age = 23;
-    strcpy(info.nationalID, "30010060100217");
-    strcpy(info.mobileNum, "01111168909");
-    strcpy(info.email, "ahmedessam222@gmail.com");
-    info.balance = 5000.0;
+    while (true) {
+        memset(buffer, 0, 1024);
+        read(new_socket, buffer, 1024);
+        std::string command(buffer);
 
-    // client.sendClientInfo(info);
-    // cout << "Sent client info" << endl;
-    client.clientLogin(info.clientID, 1234);
-    cout << "User Logged in" << endl;
+        std::istringstream iss(command);
+        std::string cmd;
+        iss >> cmd;
 
-    
-
-    int action;
-    while(true){
-            cout << "Enter an action" << endl;
-            cin >> action;
-            switch (action){
-                case LOGIN:
-                    cout << "Client Attempting clientLogin()" << endl;
-                    client.clientLogin(info.clientID, 1234);
-                break;
-                case REGISTER:
-                    cout << "Client Attempting clientRegister()" << endl;
-                    client.clientRegister(info.clientID, 1234, info);
-                break;
-                case DISPLAYINFO:
-                    cout << "Client Attempting displayInfo()" << endl;
-                    info = client.displayInfo();
-                    printInfo(info);
-                break;
-                case BALANCE:
-                    cout << "Client Attempting getAccountBalance()" << endl;
-                    double balance;
-                    balance = client.getAccountBalance();
-                    cout << "Current Balance = " << balance << endl;
-                break;
-                case DEPOSIT:
-                    cout << "Client Attempting depositMoney()" << endl;
-                    client.depositMoney(7000);
-                break;
-                case WITHDRAW:
-                    cout << "Client Attempting withdrawMoney()" << endl;
-                    client.withdrawMoney(1000);
-                break;
-                case TRANSACTION:
-                    cout << "Client Attempting receiveTransaction()" << endl;
-                    Transaction transaction;
-                    transaction.fromAccount = info.clientID;
-                    transaction.toAccount = 5555;
-                    transaction.amount = 3500;
-                    client.sendTransaction(transaction);
-                break;
-                case UNDO:
-                    cout << "Client Attempting undoTransaction()" << endl;
-                    client.undoTransaction();
-                break;
-                case REDO:
-                    cout << "Client Attempting redoTransaction()" << endl;
-                    client.redoTransaction();
-                break;
-                default:
-                    cout << "Invalid Action" << endl;
-                break;
-            }
-
+        if (cmd == "login") {
+            int clientID, password;
+            iss >> clientID >> password;
+            client.clientLogin(clientID, password);
+        } else if (cmd == "register") {
+            int clientID, password;
+            iss >> clientID >> password;
+            // Assuming clientInfo is passed somehow or hardcoded for simplicity
+            ClientInfo info = {/* initialize fields */};
+            client.clientRegister(clientID, password, info);
+        } else if (cmd == "balance") {
+            int clientID;
+            iss >> clientID;
+            double balance = client.getAccountBalance(clientID);
+            // Send balance back to Node.js server if needed
+        } else if (cmd == "deposit") {
+            int clientID;
+            double amount;
+            iss >> clientID >> amount;
+            client.depositMoney(clientID, amount);
+        } else if (cmd == "withdraw") {
+            int clientID;
+            double amount;
+            iss >> clientID >> amount;
+            client.withdrawMoney(clientID, amount);
         }
+        // Add more commands as needed
+    }
 
     return 0;
 }

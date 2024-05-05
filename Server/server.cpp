@@ -9,6 +9,7 @@
 #include <thread>
 #include <mutex>
 #include <vector>
+#include <arpa/inet.h>
 using namespace std;
 
 sqlite3* db;
@@ -145,10 +146,13 @@ void storeClientInfo(const ClientInfo& info) {
 }
 
 int Server::verifyClient(int clientSocket){
-    int clientID;
-    recv(clientSocket, &clientID, sizeof(clientID), 0);
-    int password;
-    recv(clientSocket, &password, sizeof(password), 0);
+    int networkClientID;
+    recv(clientSocket, &networkClientID, sizeof(networkClientID), 0);
+    int clientID = ntohl(networkClientID);
+
+    int networkPassword;
+    recv(clientSocket, &networkPassword, sizeof(networkPassword), 0);
+    int password = ntohl(networkPassword);
 
     // Query the client_passwords table
     string sql = "SELECT password FROM client_passwords WHERE clientID = ?;";
@@ -183,11 +187,13 @@ void Server::handleConnection(int clientSocket) {
             return;
         }
 
-        int action;
+        int action = 0;
+        int networkAmount;
         double amount;
         ClientInfo clientInfo;
 
         while(true){
+            action = 0;
             recv(clientSocket, &action, sizeof(action), 0);
             switch (action){
                 case LOGIN:
@@ -210,12 +216,16 @@ void Server::handleConnection(int clientSocket) {
                 break;
                 case DEPOSIT:
                     cout << "Client Attempting depositMoney()" << endl;
-                    recv(clientSocket, &amount, sizeof(amount), 0);
+                    recv(clientSocket, &networkAmount, sizeof(networkAmount), 0);
+                    cout << "networkAmount = "<< networkAmount << endl;
+                    amount = ntohl(networkAmount);
+                    cout << "amount = "<< amount << endl;
                     depositMoney(clientInfo.clientID, amount);
                 break;
                 case WITHDRAW:
                     cout << "Client Attempting withdrawMoney()" << endl;
-                    recv(clientSocket, &amount, sizeof(amount), 0);
+                    recv(clientSocket, &networkAmount, sizeof(networkAmount), 0);
+                    amount = ntohl(networkAmount);
                     withdrawMoney(clientInfo.clientID, amount);
                 break;
                 case TRANSACTION:
@@ -231,10 +241,9 @@ void Server::handleConnection(int clientSocket) {
                     redoTransaction(clientInfo.clientID);
                 break;
                 default:
-                    cout << "Invalid Action" << endl;
+                    // cout << "Invalid Action" << endl;
                 break;
             }
-
         }
         // Close the client socket
         close(clientSocket);
@@ -306,8 +315,6 @@ double Server::getAccountBalance(const int& clientID){
 }
 
 void Server::depositMoney(const int& clientID, double amount){
-    // double amount;
-    // recv(clientSocket, &amount, sizeof(amount), 0);
 
     cout << "Deposit amount = " << amount << endl;
 

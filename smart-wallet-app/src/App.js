@@ -1,13 +1,22 @@
 import React from 'react';
-import ClientComponent from './ClientComponent';
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import Login from './components/Login';
+import Register from './components/Register';
+import Dashboard from './components/Dashboard';
 
-const App = () => {
+function App() {
   return (
-    <div>
-      <h1>Client UI</h1>
-      <ClientComponent />
-    </div>
+    <Router>
+      <div className="App">
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/" element={<Login />} />
+        </Routes>
+      </div>
+    </Router>
   );
-};
+}
 
 export default App;
