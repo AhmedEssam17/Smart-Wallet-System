@@ -431,11 +431,13 @@ int main() {
         } else if (cmd == "fetchActiveTransactions") {
             int clientId;
             iss >> clientId;
+            cout << "Received command: " << cmd << " for clientId: " << clientId << endl;
             std::vector<TransactionTable> activeTransactions = client.fetchActiveTransactions(clientId);
             sendTransactionTableAsJson(new_socket, activeTransactions);
         } else if (cmd == "fetchUndoneTransactions") {
             int clientId;
             iss >> clientId;
+            cout << "Received command: " << cmd << " for clientId: " << clientId << endl;
             std::vector<TransactionTable> undoneTransactions = client.fetchUndoneTransactions(clientId);
             sendTransactionTableAsJson(new_socket, undoneTransactions);
         }

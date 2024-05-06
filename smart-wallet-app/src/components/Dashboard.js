@@ -48,9 +48,27 @@ function Dashboard() {
   }, [clientID, navigate]);
   
 
-    const fetchTransactions = async () => {
-        const response = await axios.get(`http://localhost:5000/transactions/${clientID}`);
-        setTransactions(response.data);
+    // const fetchTransactions = async () => {
+    //     const response = await axios.get(`http://localhost:5000/transactions/${clientID}`);
+    //     setTransactions(response.data);
+    // };
+
+    const fetchActiveTransactions = async () => {
+        try {
+            const response = await axios.get(`http://localhost:5000/api/transactions/active/${clientID}`);
+            setActiveTransactions(response.data); // Directly use response.data
+        } catch (error) {
+            console.error('Failed to fetch active transactions:', error);
+        }
+    };
+    
+    const fetchUndoneTransactions = async () => {
+        try {
+            const response = await axios.get(`http://localhost:5000/api/transactions/undone/${clientID}`);
+            setUndoneTransactions(response.data); // Directly use response.data
+        } catch (error) {
+            console.error('Failed to fetch undone transactions:', error);
+        }
     };
 
     const handleUndo = async () => {
@@ -63,6 +81,8 @@ function Dashboard() {
             if (undoResponse.data.status === "success") {
                 alert(undoResponse.data.message); // Ensure you are accessing data.message
                 setTransactionIdToModify(''); // Clear the input after action
+                fetchActiveTransactions();
+                fetchUndoneTransactions();
             } else {
                 alert(undoResponse.data.message);
             }
@@ -81,6 +101,8 @@ function Dashboard() {
             if (redoResponse.data.status === "success") {
                 alert(redoResponse.data.message); // Ensure you are accessing data.message
                 setTransactionIdToModify(''); // Clear the input after action
+                fetchActiveTransactions();
+                fetchUndoneTransactions();
             } else {
                 alert(redoResponse.data.message);
             }

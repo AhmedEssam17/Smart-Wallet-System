@@ -139,21 +139,36 @@ app.post('/api/transaction', (req, res) => {
     });
 });
 
-let activeTransactions = [];
-let undoneTransactions = [];
-
 app.get('/api/transactions/active/:clientId', async (req, res) => {
     const clientId = req.params.clientId;
-    // Filter transactions for the specific client
-    const filteredTransactions = activeTransactions.filter(tx => tx.clientId === clientId);
-    res.json(filteredTransactions);
+    client.write(`fetchActiveTransactions ${clientId}\n`);
+
+    client.once('data', (data) => {
+        const dataString = data.toString();
+        try {
+            const transactions = JSON.parse(dataString); // Assuming dataString is a JSON string of transactions
+            res.send(transactions);
+        } catch (error) {
+            console.error('Failed to parse transactions:', error);
+            res.status(500).send({ error: "Failed to parse transactions" });
+        }
+    });
 });
 
 app.get('/api/transactions/undone/:clientId', async (req, res) => {
     const clientId = req.params.clientId;
-    // Filter transactions for the specific client
-    const filteredTransactions = undoneTransactions.filter(tx => tx.clientId === clientId);
-    res.json(filteredTransactions);
+    client.write(`fetchUndoneTransactions ${clientId}\n`);
+
+    client.once('data', (data) => {
+        const dataString = data.toString();
+        try {
+            const transactions = JSON.parse(dataString); // Assuming dataString is a JSON string of transactions
+            res.send(transactions);
+        } catch (error) {
+            console.error('Failed to parse transactions:', error);
+            res.status(500).send({ error: "Failed to parse transactions" });
+        }
+    });
 });
 
 app.post('/api/transactions/undo', (req, res) => {
@@ -171,15 +186,15 @@ app.post('/api/transactions/undo', (req, res) => {
 });
 
 app.post('/api/transactions/redo', async (req, res) => {
-    const { transactionId } = req.body;
-    client.write(`redo ${transactionId}\n`);
+    const { transactionIdToModify } = req.body;
+    client.write(`redo ${transactionIdToModify}\n`);
 
     client.once('data', (data) => {
         const response = data.toString();
         if (response === "success") {
-            res.send({ status: "success", message: "Withdraw successful" });
+            res.send({ status: "success", message: "Redo successful" });
         } else {
-            res.status(500).send({ status: "error", message: "Withdraw failed" });
+            res.status(500).send({ status: "error", message: "Redo failed" });
         }
     });
 });
