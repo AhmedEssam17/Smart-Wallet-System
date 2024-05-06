@@ -1,13 +1,4 @@
 # Smart Wallet System
-
-## Server
-
-1. Compile the server:
-   ```bash
-   cd Server
-   g++ server.cpp -o ../exe/server -lsqlite3 -pthread
-
-# Smart Wallet System
 This README provides detailed instructions on how to set up and run the different components of the Smart Wallet System. The system is divided into four main parts: the C++ server, the C++ client, the Node.js server, and the React UI application. Follow these steps to get each component up and running.
 
 #### Prerequisites
