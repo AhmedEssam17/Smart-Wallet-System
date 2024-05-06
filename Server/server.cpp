@@ -10,6 +10,7 @@
 #include <mutex>
 #include <vector>
 #include <arpa/inet.h>
+#include <sstream>
 using namespace std;
 
 sqlite3* db;
@@ -26,9 +27,12 @@ public:
     int depositMoney(const int& clientID, int amount);
     int withdrawMoney(const int& clientID, int amount);
     int processTransaction(const int& clientID, const Transaction& transaction);
-    int undoTransaction(const int& clientID);
-    int redoTransaction(const int& clientID);
+    int undoTransaction(int transactionID);
+    int redoTransaction(int transactionID);
     ClientInfo displayClientInfo(const int& clientID);
+    std::vector<TransactionTable> fetchActiveTransactions(int clientId);
+    std::vector<TransactionTable> fetchUndoneTransactions(int clientId);
+    std::string serializeTransactions(const std::vector<TransactionTable>& transactions);
 
 private:
     int serverSocket;
@@ -42,12 +46,75 @@ private:
     int verifyClient(int clientSocket);
     int registerClient(int clientSocket);
 
-    std::vector<Transaction> transactionHistory;
-
-    // map<string, ClientInfo> m_clientInfo;
-    // map<string, double> m_accountBalances;
-    // map<string, vector<Transaction>> m_transactions;
 };
+
+std::string Server::serializeTransactions(const std::vector<TransactionTable>& transactions) {
+    std::ostringstream jsonStream;
+    jsonStream << "[";
+    for (size_t i = 0; i < transactions.size(); ++i) {
+        const auto& tx = transactions[i];
+        jsonStream << "{"
+                    << "\"transactionID\": " << tx.transactionID << ", "
+                   << "\"fromAccount\": " << tx.fromAccount << ", "
+                   << "\"toAccount\": " << tx.toAccount << ", "
+                   << "\"amount\": " << tx.amount
+                   << "}";
+        if (i < transactions.size() - 1) {
+            jsonStream << ", ";
+        }
+    }
+    jsonStream << "]";
+    return jsonStream.str();
+}
+
+std::vector<TransactionTable> Server::fetchActiveTransactions(int clientId) {
+    sqlite3* db;
+    sqlite3_open("database.db", &db);
+    std::vector<TransactionTable> transactions;
+    sqlite3_stmt* stmt;
+    std::string sql = "SELECT * FROM transactions WHERE sender_id = ?";
+
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
+    sqlite3_bind_int(stmt, 1, clientId);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        TransactionTable tx;
+        tx.transactionID = sqlite3_column_int(stmt, 0);
+        tx.fromAccount = sqlite3_column_int(stmt, 1);
+        tx.toAccount = sqlite3_column_int(stmt, 2);
+        tx.amount = sqlite3_column_int(stmt, 3);
+        transactions.push_back(tx);
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return transactions;
+}
+
+// Function to fetch undone transactions
+std::vector<TransactionTable> Server::fetchUndoneTransactions(int clientId) {
+    sqlite3* db;
+    sqlite3_open("database.db", &db);
+    std::vector<TransactionTable> transactions;
+    sqlite3_stmt* stmt;
+    std::string sql = "SELECT * FROM undone_transactions WHERE sender_id = ?";
+
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
+    sqlite3_bind_int(stmt, 1, clientId);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        TransactionTable tx;
+        tx.transactionID = sqlite3_column_int(stmt, 0);
+        tx.fromAccount = sqlite3_column_int(stmt, 1);
+        tx.toAccount = sqlite3_column_int(stmt, 2);
+        tx.amount = sqlite3_column_int(stmt, 3);
+        transactions.push_back(tx);
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return transactions;
+}
 
 Server::Server() {
     initSocket();
@@ -194,6 +261,7 @@ void Server::handleConnection(int clientSocket) {
         int networkAmount;
         int amount;
         int response = 0;
+        int transactionID;
         ClientInfo clientInfo;
 
         while(true){
@@ -232,13 +300,6 @@ void Server::handleConnection(int clientSocket) {
                     cout << "getAccountBalance >> clientInfo.clientID = " << clientInfo.clientID << endl;
                     clientInfo.balance = getAccountBalance(clientInfo.clientID);
                     send(clientSocket, &clientInfo.balance, sizeof(clientInfo.balance), 0);
-                    // if(clientInfo.balance >= 0){
-                    //     response = 1;
-                    // }
-                    // else{
-                    //     response = 0;
-                    // }
-                    // send(clientSocket, &response, sizeof(response), 0);
                 break;
                 case DEPOSIT:
                     cout << "Client Attempting depositMoney()" << endl;
@@ -263,12 +324,32 @@ void Server::handleConnection(int clientSocket) {
                 break;
                 case UNDO:
                     cout << "Client Attempting undoTransaction()" << endl;
-                    undoTransaction(clientInfo.clientID);
+                    recv(clientSocket, &transactionID, sizeof(transactionID), 0);
+                    response = undoTransaction(transactionID);
+                    send(clientSocket, &response, sizeof(response), 0);
                 break;
                 case REDO:
                     cout << "Client Attempting redoTransaction()" << endl;
-                    redoTransaction(clientInfo.clientID);
+                    recv(clientSocket, &transactionID, sizeof(transactionID), 0);
+                    response = redoTransaction(transactionID);
+                    send(clientSocket, &response, sizeof(response), 0);
                 break;
+                case ACTIVETRANSACTION: {
+                    int clientId;
+                    recv(clientSocket, &clientId, sizeof(clientId), 0);
+                    std::vector<TransactionTable> activeTransactions = fetchActiveTransactions(clientId);
+                    std::string serialized = serializeTransactions(activeTransactions);
+                    send(clientSocket, serialized.c_str(), serialized.size(), 0);
+                break;
+                }
+                case UNDONETRANSACTION: {
+                    int clientId;
+                    recv(clientSocket, &clientId, sizeof(clientId), 0);
+                    std::vector<TransactionTable> undoneTransactions = fetchUndoneTransactions(clientId);
+                    std::string serialized = serializeTransactions(undoneTransactions);
+                    send(clientSocket, serialized.c_str(), serialized.size(), 0);
+                    break;
+                }
                 default:
                     // cout << "Invalid Action" << endl;
                 break;
@@ -441,47 +522,139 @@ int Server::processTransaction(const int& clientID, const Transaction& transacti
     }
 
     withdrawResponse = withdrawMoney(clientID, transaction.amount);
-
-    // Deposit amount to the recipient's account
     depositResponse = depositMoney(transaction.toAccount, transaction.amount);
 
     if(depositResponse == 0 || withdrawResponse == 0){
         return 0;
     }
 
-    cout << "Transaction processed successfully" << endl;
+    // Insert the transaction into the transactions table
+    sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+    string sql = "INSERT INTO transactions (sender_id, recipient_id, amount) VALUES (?, ?, ?);";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
+    sqlite3_bind_int(stmt, 1, transaction.fromAccount);
+    sqlite3_bind_int(stmt, 2, transaction.toAccount);
+    sqlite3_bind_int(stmt, 3, transaction.amount);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        cerr << "Error inserting transaction into database: " << sqlite3_errmsg(db) << endl;
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_finalize(stmt);
+        return 0;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
 
-    transactionHistory.push_back(transaction);
+    cout << "Transaction processed successfully" << endl;
 
     return 1;
 }
 
-int Server::undoTransaction(const int& clientID){
-    int depositResponse;
-    int withdrawResponse;
-    if (!transactionHistory.empty()) {
-        // Undo the last transaction
-        Transaction lastTransaction = transactionHistory.back();
-        depositResponse = depositMoney(lastTransaction.fromAccount, lastTransaction.amount);
-        withdrawResponse = withdrawMoney(lastTransaction.toAccount, lastTransaction.amount);
+int Server::undoTransaction(int transactionID) {
+    sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
 
-        if(depositResponse == 0 || withdrawResponse == 0){
-            return 0;
-        }
-
-        // Remove the last transaction from history
-        transactionHistory.pop_back();
-
-        cout << "Transaction undone successfully" << endl;
-        return 1;
-    } else {
-        cout << "No transaction to undo" << endl;
+    // Retrieve transaction details
+    string sql = "SELECT sender_id, recipient_id, amount FROM transactions WHERE transaction_id = ?";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
+    sqlite3_bind_int(stmt, 1, transactionID);
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
+        cerr << "Error retrieving transaction details: " << sqlite3_errmsg(db) << endl;
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_finalize(stmt);
         return 0;
     }
+    int senderId = sqlite3_column_int(stmt, 0);
+    int recipientId = sqlite3_column_int(stmt, 1);
+    int amount = sqlite3_column_int(stmt, 2);
+    sqlite3_finalize(stmt);
+
+    // Reverse the transaction effect on balances
+    if (depositMoney(senderId, amount) == 0 || withdrawMoney(recipientId, amount) == 0) {
+        cerr << "Error reversing balances" << endl;
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return 0;
+    }
+
+    // Move the transaction from transactions to undone_transactions
+    sql = "INSERT INTO undone_transactions SELECT * FROM transactions WHERE transaction_id = ?";
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
+    sqlite3_bind_int(stmt, 1, transactionID);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        cerr << "Error moving transaction to undone_transactions: " << sqlite3_errmsg(db) << endl;
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_finalize(stmt);
+        return 0;
+    }
+    sqlite3_finalize(stmt);
+
+    // Delete the transaction from transactions table
+    sql = "DELETE FROM transactions WHERE transaction_id = ?";
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
+    sqlite3_bind_int(stmt, 1, transactionID);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        cerr << "Error deleting transaction: " << sqlite3_errmsg(db) << endl;
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_finalize(stmt);
+        return 0;
+    }
+    sqlite3_finalize(stmt);
+
+    sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+    return 1;
 }
 
-int Server::redoTransaction(const int& clientID){
-    return 0;
+int Server::redoTransaction(int transactionID) {
+    sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+
+    // Retrieve transaction details from undone_transactions
+    string sql = "SELECT sender_id, recipient_id, amount FROM undone_transactions WHERE transaction_id = ?";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
+    sqlite3_bind_int(stmt, 1, transactionID);
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
+        cerr << "Error retrieving transaction details: " << sqlite3_errmsg(db) << endl;
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_finalize(stmt);
+        return 0;
+    }
+    int senderId = sqlite3_column_int(stmt, 0);
+    int recipientId = sqlite3_column_int(stmt, 1);
+    int amount = sqlite3_column_int(stmt, 2);
+    sqlite3_finalize(stmt);
+
+    // Reapply the transaction effect on balances
+    if (withdrawMoney(senderId, amount) == 0 || depositMoney(recipientId, amount) == 0) {
+        cerr << "Error reapplying balances" << endl;
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return 0;
+    }
+
+    // Move the transaction from undone_transactions to transactions
+    sql = "INSERT INTO transactions SELECT * FROM undone_transactions WHERE transaction_id = ?";
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
+    sqlite3_bind_int(stmt, 1, transactionID);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        cerr << "Error moving transaction back to transactions: " << sqlite3_errmsg(db) << endl;
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_finalize(stmt);
+        return 0;
+    }
+    sqlite3_finalize(stmt);
+
+    // Delete the transaction from undone_transactions table
+    sql = "DELETE FROM undone_transactions WHERE transaction_id = ?";
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
+    sqlite3_bind_int(stmt,1, transactionID);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        cerr << "Error deleting transaction from undone_transactions: " << sqlite3_errmsg(db) << endl;
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_finalize(stmt);
+        return 0;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+    return 1;
 }
 
 int Server::receiveTransaction(int clientSocket, const int& clientID) {
@@ -624,6 +797,36 @@ void initDatabase(){
                     ");";
     
     rc = sqlite3_exec(db, passSql, nullptr, nullptr, nullptr);
+    if (rc != SQLITE_OK) {
+        cerr << "SQL error: " << sqlite3_errmsg(db) << endl;
+        sqlite3_close(db);
+        exit(1);
+    }
+
+    const char* transactionSql = "CREATE TABLE IF NOT EXISTS transactions ("
+                    "transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    "sender_id INTEGER,"
+                    "recipient_id INTEGER,"
+                    "amount INTEGER,"
+                    "timestamp DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ");";
+    
+    rc = sqlite3_exec(db, transactionSql, nullptr, nullptr, nullptr);
+    if (rc != SQLITE_OK) {
+        cerr << "SQL error: " << sqlite3_errmsg(db) << endl;
+        sqlite3_close(db);
+        exit(1);
+    }
+
+    const char* undoneTransactionSql = "CREATE TABLE IF NOT EXISTS undone_transactions ("
+                    "transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    "sender_id INTEGER,"
+                    "recipient_id INTEGER,"
+                    "amount INTEGER,"
+                    "timestamp DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ");";
+    
+    rc = sqlite3_exec(db, undoneTransactionSql, nullptr, nullptr, nullptr);
     if (rc != SQLITE_OK) {
         cerr << "SQL error: " << sqlite3_errmsg(db) << endl;
         sqlite3_close(db);

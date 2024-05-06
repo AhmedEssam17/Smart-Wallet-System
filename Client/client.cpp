@@ -23,12 +23,15 @@ public:
     void withdrawMoney(const int& clientID, int amount);
     int getAccountBalance(const int& clientID);
     void sendTransaction(const Transaction& transaction);
-    void undoTransaction();
-    void redoTransaction();
+    void undoTransaction(int transactionID);
+    void redoTransaction(int transactionID);
     void clientLogin(const int& clientID, const int& password);
-    void clientRegister(const int& clientID, const int& password, const ClientInfo& info);\
+    void clientRegister(const int& clientID, const int& password, const ClientInfo& info);
     ClientInfo displayInfo(const int& clientID);
     int receieveReponseFromServer();
+    std::vector<TransactionTable> fetchActiveTransactions(const int& clientId);
+    std::vector<TransactionTable> fetchUndoneTransactions(const int& clientId);
+    std::vector<TransactionTable> parseTransactions(const std::string& data);
 
 private:
     int clientSocket;
@@ -109,14 +112,16 @@ void Client::sendTransaction(const Transaction& transaction) {
     send(clientSocket, &transaction, sizeof(transaction), 0);
 }
 
-void Client::undoTransaction(){
+void Client::undoTransaction(int transactionID) {
     action = UNDO;
     send(clientSocket, &action, sizeof(action), 0);
+    send(clientSocket, &transactionID, sizeof(transactionID), 0);
 }
 
-void Client::redoTransaction(){
+void Client::redoTransaction(int transactionID) {
     action = REDO;
     send(clientSocket, &action, sizeof(action), 0);
+    send(clientSocket, &transactionID, sizeof(transactionID), 0);
 }
 
 void Client::clientLogin(const int& clientID, const int& password){
@@ -150,6 +155,55 @@ ClientInfo Client::displayInfo(const int& clientID){
     recv(clientSocket, &clientInfo, sizeof(clientInfo), 0);
 
     return clientInfo;
+}
+
+// Function to request and receive active transactions
+std::vector<TransactionTable> Client::fetchActiveTransactions(const int& clientId) {
+    int action = ACTIVETRANSACTION;
+    send(clientSocket, &action, sizeof(action), 0);
+    send(clientSocket, &clientId, sizeof(clientId), 0);
+
+    char buffer[4096];
+    recv(clientSocket, buffer, sizeof(buffer), 0);
+    std::string data(buffer);
+    return parseTransactions(data);
+}
+
+std::vector<TransactionTable> Client::fetchUndoneTransactions(const int& clientId) {
+    int action = UNDONETRANSACTION;
+    send(clientSocket, &action, sizeof(action), 0);
+    send(clientSocket, &clientId, sizeof(clientId), 0);
+
+    char buffer[4096];
+    recv(clientSocket, buffer, sizeof(buffer), 0);
+    std::string data(buffer);
+    return parseTransactions(data);
+}
+
+std::vector<TransactionTable> Client::parseTransactions(const std::string& data) {
+    std::vector<TransactionTable> transactions;
+    std::istringstream iss(data);
+    std::string token;
+    while (getline(iss, token, '{')) {
+        getline(iss, token, '}');
+        std::istringstream tokenStream(token);
+        std::string key, value;
+        TransactionTable tx;
+        while (getline(tokenStream, key, ':')) {
+            getline(tokenStream, value, ',');
+            if (key.find("transactionID") != std::string::npos) {
+                tx.transactionID = std::stoi(value);
+            } else if (key.find("fromAccount") != std::string::npos) {
+                tx.fromAccount = std::stoi(value);
+            } else if (key.find("toAccount") != std::string::npos) {
+                tx.toAccount = std::stoi(value);
+            } else if (key.find("amount") != std::string::npos) {
+                tx.amount = std::stoi(value);
+            }
+        }
+        transactions.push_back(tx);
+    }
+    return transactions;
 }
 
 void printInfo(const ClientInfo& clientInfo){
@@ -198,6 +252,24 @@ void sendClientInfoAsJson(int new_socket, const ClientInfo& info) {
 
     std::string jsonString = jsonStream.str();
     send(new_socket, jsonString.c_str(), jsonString.length(), 0);
+}
+
+void sendTransactionTableAsJson(int new_socket, const std::vector<TransactionTable>& transactions){
+    std::ostringstream jsonStream;
+    jsonStream << "[";
+    for (size_t i = 0; i < transactions.size(); ++i) {
+        const auto& tx = transactions[i];
+        jsonStream << "{"
+                    << "\"transactionID\": " << tx.transactionID << ", "
+                   << "\"fromAccount\": " << tx.fromAccount << ", "
+                   << "\"toAccount\": " << tx.toAccount << ", "
+                   << "\"amount\": " << tx.amount
+                   << "}";
+        if (i < transactions.size() - 1) jsonStream << ", ";
+    }
+    jsonStream << "]";
+    std::string data = jsonStream.str();
+    send(new_socket, data.c_str(), data.length(), 0);
 }
 
 int main() {
@@ -342,8 +414,31 @@ int main() {
             client.sendTransaction(transaction);
             response = client.receieveReponseFromServer();
             sendResponseToUI(response, new_socket);
+        } else if (cmd == "undo") {
+            int transactionID;
+            iss >> transactionID;
+            cout << "Received command: " << cmd << " for Transaction ID: " << transactionID << endl;
+            client.undoTransaction(transactionID);
+            response = client.receieveReponseFromServer();
+            sendResponseToUI(response, new_socket);
+        } else if (cmd == "redo") {
+            int transactionID;
+            iss >> transactionID;
+            cout << "Received command: " << cmd << " for Transaction ID: " << transactionID << endl;
+            client.redoTransaction(transactionID);
+            response = client.receieveReponseFromServer();
+            sendResponseToUI(response, new_socket);
+        } else if (cmd == "fetchActiveTransactions") {
+            int clientId;
+            iss >> clientId;
+            std::vector<TransactionTable> activeTransactions = client.fetchActiveTransactions(clientId);
+            sendTransactionTableAsJson(new_socket, activeTransactions);
+        } else if (cmd == "fetchUndoneTransactions") {
+            int clientId;
+            iss >> clientId;
+            std::vector<TransactionTable> undoneTransactions = client.fetchUndoneTransactions(clientId);
+            sendTransactionTableAsJson(new_socket, undoneTransactions);
         }
-        // Add more commands as needed
     }
 
     return 0;

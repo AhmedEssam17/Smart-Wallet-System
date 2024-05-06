@@ -3,13 +3,42 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 function Dashboard() {
-  const [clientID, setClientID] = useState(localStorage.getItem('clientID') || '');
-  const [balance, setBalance] = useState(0);
-  const [amount, setAmount] = useState(0);
-  const navigate = useNavigate();
-  const [recipientID, setRecipientID] = useState('');
-  const [transactionAmount, setTransactionAmount] = useState('');
-  const [clientInfo, setClientInfo] = useState({});
+    const [clientID, setClientID] = useState(localStorage.getItem('clientID') || '');
+    const [balance, setBalance] = useState(0);
+    const [amount, setAmount] = useState(0);
+    const navigate = useNavigate();
+    const [recipientID, setRecipientID] = useState('');
+    const [transactionAmount, setTransactionAmount] = useState('');
+    const [clientInfo, setClientInfo] = useState({});
+    const [transactions, setTransactions] = useState([]);
+
+    const [activeTransactions, setActiveTransactions] = useState([]);
+    const [undoneTransactions, setUndoneTransactions] = useState([]);
+
+    const [transactionIdToModify, setTransactionIdToModify] = useState('');
+
+    // useEffect(() => {
+    //     const fetchActiveTransactions = async () => {
+    //         const response = await fetch(`/api/transactions/active/${clientID}`);
+    //         const data = await response.json();
+    //         setActiveTransactions(data);
+    //     };
+
+    //     const fetchUndoneTransactions = async () => {
+    //         const response = await fetch(`/api/transactions/undone/${clientID}`);
+    //         const data = await response.json();
+    //         setUndoneTransactions(data);
+    //     };
+
+    //     fetchActiveTransactions();
+    //     fetchUndoneTransactions();
+
+    //     // setInterval(async () => {
+    //     //     // Fetch or recalculate active and undone transactions
+    //     //     activeTransactions = await fetchActiveTransactions();
+    //     //     undoneTransactions = await fetchUndoneTransactions();
+    //     // }, 1000); // Update every 1000 milliseconds (1 second)
+    // }, [clientID]);
 
   useEffect(() => {
     if (!clientID) {
@@ -17,6 +46,48 @@ function Dashboard() {
       navigate('/login'); // Redirect to Login page
     }
   }, [clientID, navigate]);
+  
+
+    const fetchTransactions = async () => {
+        const response = await axios.get(`http://localhost:5000/transactions/${clientID}`);
+        setTransactions(response.data);
+    };
+
+    const handleUndo = async () => {
+        if (!transactionIdToModify) {
+            alert('Please enter a transaction ID.');
+            return;
+        }
+        try {
+            const undoResponse = await axios.post('http://localhost:5000/api/transactions/undo', { transactionIdToModify });
+            if (undoResponse.data.status === "success") {
+                alert(undoResponse.data.message); // Ensure you are accessing data.message
+                setTransactionIdToModify(''); // Clear the input after action
+            } else {
+                alert(undoResponse.data.message);
+            }
+        } catch (error) {
+            console.error('Error during undo:', error);
+        }
+    };
+    
+    const handleRedo = async () => {
+        if (!transactionIdToModify) {
+            alert('Please enter a transaction ID.');
+            return;
+        }
+        try {
+            const redoResponse = await axios.post('http://localhost:5000/api/transactions/redo', { transactionIdToModify });
+            if (redoResponse.data.status === "success") {
+                alert(redoResponse.data.message); // Ensure you are accessing data.message
+                setTransactionIdToModify(''); // Clear the input after action
+            } else {
+                alert(redoResponse.data.message);
+            }
+        } catch (error) {
+            console.error('Error during redo:', error);
+        }
+    };
 
   const fetchClientInfo = async () => {
     try {
@@ -117,6 +188,46 @@ function Dashboard() {
         <input type="text" className="form-control" placeholder="Recipient ID" value={recipientID} onChange={e => setRecipientID(e.target.value)} />
         <input type="number" className="form-control" placeholder="Amount" value={transactionAmount} onChange={e => setTransactionAmount(e.target.value)} />
         <button className="btn btn-primary" onClick={handleTransaction}>Send Money</button>
+        </div>
+
+        <div>
+            {transactions.map((transaction) => (
+                <div key={transaction.transactionID}>
+                    <p>{`Transaction ID: ${transaction.transactionID}, Amount: ${transaction.amount}`}</p>
+                    <button onClick={() => handleUndo(transaction.transactionID)}>Undo</button>
+                    <button onClick={() => handleRedo(transaction.transactionID)}>Redo</button>
+                </div>
+            ))}
+        </div>
+
+        <div className="container mt-5">
+            <div className="mb-3">
+                <input
+                    type="text"
+                    className="form-control"
+                    value={transactionIdToModify}
+                    onChange={(e) => setTransactionIdToModify(e.target.value)}
+                    placeholder="Enter Transaction ID"
+                />
+                <button className="btn btn-warning" onClick={handleUndo} style={{ margin: '10px' }}>Undo Transaction</button>
+                <button className="btn btn-success" onClick={handleRedo} style={{ margin: '10px' }}>Redo Transaction</button>
+            </div>
+        </div>
+
+        <div>
+            <h2>Active Transactions</h2>
+            {activeTransactions.map(tx => (
+                <div key={tx.transactionID}>
+                    <p>Transaction ID: {tx.transactionID}, RecipientID: {tx.toAccount}, Amount: {tx.amount}</p>
+                </div>
+            ))}
+
+            <h2>Undone Transactions</h2>
+            {undoneTransactions.map(tx => (
+                <div key={tx.transaction_id}>
+                    <p>Transaction ID: {tx.transactionID}, RecipientID: {tx.toAccount}, Amount: {tx.amount}</p>
+                </div>
+            ))}
         </div>
     </div>
     );

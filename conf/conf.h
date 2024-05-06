@@ -17,6 +17,13 @@ struct Transaction {
     int amount;
 };
 
+struct TransactionTable {
+    int transactionID;
+    int fromAccount;
+    int toAccount;
+    int amount;
+};
+
 enum ACTIONS { 
     LOGIN = 1,
     REGISTER,
@@ -26,7 +33,9 @@ enum ACTIONS {
     WITHDRAW,
     TRANSACTION,
     UNDO,
-    REDO
+    REDO,
+    ACTIVETRANSACTION,
+    UNDONETRANSACTION
 };
 
 ACTIONS actions;

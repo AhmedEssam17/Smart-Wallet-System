@@ -139,6 +139,51 @@ app.post('/api/transaction', (req, res) => {
     });
 });
 
+let activeTransactions = [];
+let undoneTransactions = [];
+
+app.get('/api/transactions/active/:clientId', async (req, res) => {
+    const clientId = req.params.clientId;
+    // Filter transactions for the specific client
+    const filteredTransactions = activeTransactions.filter(tx => tx.clientId === clientId);
+    res.json(filteredTransactions);
+});
+
+app.get('/api/transactions/undone/:clientId', async (req, res) => {
+    const clientId = req.params.clientId;
+    // Filter transactions for the specific client
+    const filteredTransactions = undoneTransactions.filter(tx => tx.clientId === clientId);
+    res.json(filteredTransactions);
+});
+
+app.post('/api/transactions/undo', (req, res) => {
+    const { transactionIdToModify } = req.body;
+    client.write(`undo ${transactionIdToModify}\n`);
+
+    client.once('data', (data) => {
+        const response = data.toString();
+        if (response === "success") {
+            res.send({ status: "success", message: "Undo successful" });
+        } else {
+            res.status(500).send({ status: "error", message: "Undo failed" });
+        }
+    });
+});
+
+app.post('/api/transactions/redo', async (req, res) => {
+    const { transactionId } = req.body;
+    client.write(`redo ${transactionId}\n`);
+
+    client.once('data', (data) => {
+        const response = data.toString();
+        if (response === "success") {
+            res.send({ status: "success", message: "Withdraw successful" });
+        } else {
+            res.status(500).send({ status: "error", message: "Withdraw failed" });
+        }
+    });
+});
+
 // Additional error handling and server setup
 client.on('error', (err) => {
     console.error('Error with C++ client connection:',err);
