@@ -9,11 +9,17 @@ function Login() {
 
   const handleLogin = async () => {
     try {
-      localStorage.setItem('clientID', clientID);
       const response = await axios.post('http://localhost:5000/api/login', { clientID, password });
-      navigate('/dashboard'); // Redirect to Dashboard
+      if (response.data.status === "success") {
+        localStorage.setItem('clientID', clientID);
+        alert('Login successful.');
+        navigate('/dashboard'); // Redirect to Dashboard
+      } else {
+        alert(response.data.message || 'Login failed.');
+      }
     } catch (error) {
       console.error('Login failed:', error);
+      alert('Login failed. Please check your credentials and try again.');
     }
   };
 

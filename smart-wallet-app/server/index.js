@@ -30,7 +30,12 @@ app.post('/api/login', (req, res) => {
 
     // Setup event listener for receiving data
     client.once('data', (data) => {
-        res.send(data.toString());
+        const response = data.toString();
+        if (response === "success") {
+            res.send({ status: "success", message: "Login successful" });
+        } else {
+            res.status(500).send({ status: "error", message: "Login failed" });
+        }
     });
 });
 
@@ -43,8 +48,14 @@ app.post('/api/register', (req, res) => {
     client.write(`register ${clientID} ${password} ${infoString}\n`);
 
     client.once('data', (data) => {
-        res.send(data.toString());
-    });
+        const response = data.toString();
+        console.log("Response from C++ client:", response); // Log the raw response
+        if (response === "success") {
+          res.send({ status: "success", message: "Register successful" });
+        } else {
+          res.status(500).send({ status: "error", message: "Register failed" });
+        }
+      });
 });
 
 // Balance route
@@ -54,7 +65,6 @@ app.get('/api/balance/:clientID', (req, res) => {
     client.write(`balance ${clientID}\n`);
 
     client.once('data', (data) => {
-        console.log(`Received data from TCP client: ${data.toString()}`); // Log received data
         res.send({ balance: data.toString() });
     });
 
@@ -70,9 +80,16 @@ app.post('/api/deposit', (req, res) => {
     client.write(`deposit ${clientID} ${amount}\n`);
 
     client.once('data', (data) => {
-        res.send(data.toString());
+        const response = data.toString();
+        if (response === "success") {
+            res.send({ status: "success", message: "Deposit successful" });
+        } else {
+            res.status(500).send({ status: "error", message: "Deposit failed" });
+        }
     });
 });
+
+
 
 // Withdraw route
 app.post('/api/withdraw', (req, res) => {
@@ -80,7 +97,45 @@ app.post('/api/withdraw', (req, res) => {
     client.write(`withdraw ${clientID} ${amount}\n`);
 
     client.once('data', (data) => {
-        res.send(data.toString());
+        const response = data.toString();
+        if (response === "success") {
+            res.send({ status: "success", message: "Withdraw successful" });
+        } else {
+            res.status(500).send({ status: "error", message: "Withdraw failed" });
+        }
+    });
+});
+
+// Display Info Route
+app.get('/api/clientInfo/:clientID', (req, res) => {
+    const { clientID } = req.params;
+    client.write(`displayInfo ${clientID}\n`);
+
+    client.once('data', (data) => {
+        const dataString = data.toString();
+        try {
+            const info = JSON.parse(dataString); // Directly parse the JSON string
+            res.send(info);
+        } catch (error) {
+            console.error('Failed to parse client info:', error);
+            res.status(500).send({ error: "Failed to parse client info" });
+        }
+    });
+});
+
+// Send Transaction Route
+app.post('/api/transaction', (req, res) => {
+    const { fromClientID, toClientID, amount } = req.body;
+    // Format the data as a space-separated string
+    client.write(`sendTransaction ${fromClientID} ${toClientID} ${amount}\n`);
+
+    client.once('data', (data) => {
+        const response = data.toString();
+        if (response === "success") {
+            res.send({ status: "success", message: "Transaction successful" });
+        } else {
+            res.status(500).send({ status: "error", message: "Transaction failed" });
+        }
     });
 });
 

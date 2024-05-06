@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 
 function Register({ onRegisterSuccess }) {
   const [clientID, setClientID] = useState('');
@@ -12,6 +13,7 @@ function Register({ onRegisterSuccess }) {
     email: '',
     balance: ''
   });
+  const navigate = useNavigate();
 
   const handleInputChange = (e) => {
     setClientInfo({ ...clientInfo, [e.target.name]: e.target.value });
@@ -24,10 +26,15 @@ function Register({ onRegisterSuccess }) {
         password,
         clientInfo
       });
-      onRegisterSuccess(response.data);  // Handle post-registration logic
+      if (response.data.status === "success") {
+        alert('Registration successful. Please login.');
+        navigate('/login'); // Redirect to login after registration
+      } else {
+        alert(response.data.message || 'Registration failed.');
+      }
     } catch (error) {
       console.error('Registration failed:', error);
-      // Optionally, handle user feedback here
+      alert('Registration failed. Please check the details and try again.');
     }
   };
 

@@ -27,7 +27,8 @@ public:
     void redoTransaction();
     void clientLogin(const int& clientID, const int& password);
     void clientRegister(const int& clientID, const int& password, const ClientInfo& info);\
-    ClientInfo displayInfo();
+    ClientInfo displayInfo(const int& clientID);
+    int receieveReponseFromServer();
 
 private:
     int clientSocket;
@@ -141,7 +142,7 @@ void Client::clientRegister(const int& clientID, const int& password, const Clie
     sendClientInfo(info);
 }
 
-ClientInfo Client::displayInfo(){
+ClientInfo Client::displayInfo(const int& clientID){
     action = DISPLAYINFO;
     send(clientSocket, &action, sizeof(action), 0);
 
@@ -161,39 +162,43 @@ void printInfo(const ClientInfo& clientInfo){
     cout << "email = " << clientInfo.email << endl;
 }
 
-// int main(int argc, char* argv[]) {
-//     Client client;
-//     client.connectToServer(SERVERADDR, PORT);
+int Client::receieveReponseFromServer(){
+    int response;
+    recv(clientSocket, &response, sizeof(response), 0);
+    cout << "response = "<< response << endl;
+    return response;
+}
 
-//     if (argc > 1) {
-//         std::string command = argv[1];
-//         if (command == "--login" && argc == 4) {
-//             int clientID = std::stoi(argv[2]);
-//             int password = std::stoi(argv[3]);
-//             client.clientLogin(clientID, password);
-//         } else if (command == "--register" && argc == 4) {
-//             int clientID = std::stoi(argv[2]);
-//             int password = std::stoi(argv[3]);
-//             // Assuming clientInfo is passed somehow or hardcoded for simplicity
-//             ClientInfo info = {/* initialize fields */};
-//             client.clientRegister(clientID, password, info);
-//         } else if (command == "--balance" && argc == 3) {
-//             int clientID = std::stoi(argv[2]);
-//             std::cout << client.getAccountBalance(clientID);
-//         } else if (command == "--deposit" && argc == 4) {
-//             int clientID = std::stoi(argv[2]);
-//             double amount = std::stod(argv[3]);
-//             client.depositMoney(clientID, amount);
-//         } else if (command == "--withdraw" && argc == 4) {
-//             int clientID = std::stoi(argv[2]);
-//             double amount = std::stod(argv[3]);
-//             client.withdrawMoney(clientID, amount);
-//         }
-//         // Add more commands as needed
-//     }
+void sendResponseToUI(int response, int nodeSocket){
+    string responseString;
+    if(response == 1){
+        responseString = "success";
+    }
+    else{
+        responseString = "failed";
+    }
+    cout << "responseString = " << responseString << endl;
+    send(nodeSocket, responseString.c_str(), responseString.length(), 0);
+}
 
-//     return 0;
-// }
+#include <sstream>
+#include <string>
+
+void sendClientInfoAsJson(int new_socket, const ClientInfo& info) {
+    std::ostringstream jsonStream;
+    jsonStream << "{"
+               << "\"clientID\": " << info.clientID << ", "
+               << "\"name\": \"" << info.name << "\", "
+               << "\"age\": " << info.age << ", "
+               << "\"mobileNum\": \"" << info.mobileNum << "\", "
+               << "\"nationalID\": \"" << info.nationalID << "\", "
+               << "\"email\": \"" << info.email << "\", "
+               << "\"balance\": " << info.balance
+               << "}";
+
+    std::string jsonString = jsonStream.str();
+    send(new_socket, jsonString.c_str(), jsonString.length(), 0);
+}
 
 int main() {
     int server_fd, new_socket;
@@ -237,13 +242,15 @@ int main() {
     Client client;
     client.connectToServer(SERVERADDR, PORT);
 
+    int response = 0;
+
     while (true) {
         memset(buffer, 0, 1024);
         read(new_socket, buffer, 1024);
-        std::string command(buffer);
+        string command(buffer);
 
-        std::istringstream iss(command);
-        std::string cmd;
+        istringstream iss(command);
+        string cmd;
         iss >> cmd;
 
         if (cmd == "login") {
@@ -253,33 +260,52 @@ int main() {
             cout << "clientID: " << clientID << endl;
             cout << "password: " << password << endl;
             client.clientLogin(clientID, password);
+            response = client.receieveReponseFromServer();
+            sendResponseToUI(response, new_socket);
         } else if (cmd == "register") {
             int clientID;
             int password;
             iss >> clientID >> password;
 
-            std::string name, age, mobileNum, nationalID, email, balance;
+            string name, age, mobileNum, nationalID, email, balance;
             iss >> name >> age >> mobileNum >> nationalID >> email >> balance;
 
             ClientInfo info;
             info.clientID = clientID;
             strcpy(info.name, name.c_str());
-            info.age = std::stoi(age);
+            
+            try {
+                info.age = stoi(age);
+            } catch (const std::invalid_argument& e) {
+                cerr << "Invalid age: " << age << endl;
+                continue; // Skip processing this line
+            }
+
             strcpy(info.mobileNum, mobileNum.c_str());
             strcpy(info.nationalID, nationalID.c_str());
             strcpy(info.email, email.c_str());
-            info.balance = std::stoi(balance);
+            
+            try {
+                info.balance = stoi(balance);
+            } catch (const std::invalid_argument& e) {
+                cerr << "Invalid balance: " << balance << endl;
+                continue; // Skip processing this line
+            }
 
             client.clientRegister(clientID, password, info);
+            response = client.receieveReponseFromServer();
+            sendResponseToUI(response, new_socket);
         } else if (cmd == "balance") {
             int clientID;
             iss >> clientID;
             cout << "Received command: " << cmd << endl;
             cout << "clientID: " << clientID << endl;
             int balance = client.getAccountBalance(clientID);
+            // response = client.receieveReponseFromServer();
             cout << "After getAccountBalance >> Balance = " << balance << endl;
-            std::string balanceStr = std::to_string(balance);
+            string balanceStr = to_string(balance);
             send(new_socket, balanceStr.c_str(), balanceStr.size(), 0);
+            // sendResponseToUI(response, new_socket);
         } else if (cmd == "deposit") {
             int clientID;
             int amount;
@@ -288,6 +314,8 @@ int main() {
             cout << "clientID: " << clientID << endl;
             cout << "amount: " << amount << endl;
             client.depositMoney(clientID, amount);
+            response = client.receieveReponseFromServer();
+            sendResponseToUI(response, new_socket);
         } else if (cmd == "withdraw") {
             int clientID;
             int amount;
@@ -296,6 +324,24 @@ int main() {
             cout << "clientID: " << clientID << endl;
             cout << "amount: " << amount << endl;
             client.withdrawMoney(clientID, amount);
+            response = client.receieveReponseFromServer();
+            sendResponseToUI(response, new_socket);
+        } else if (cmd == "displayInfo") {
+            int clientID;
+            iss >> clientID;
+            cout << "Received command: " << cmd << endl;
+            cout << "clientID: " << clientID << endl;
+            ClientInfo info = client.displayInfo(clientID);
+            sendClientInfoAsJson(new_socket, info);
+        } else if (cmd == "sendTransaction") {
+            int fromClientID, toClientID, amount;
+            iss >> fromClientID >> toClientID >> amount;
+            cout << "Received command: " << cmd << endl;
+            cout << "From ClientID: " << fromClientID << ", To ClientID: " << toClientID << ", Amount: " << amount << endl;
+            Transaction transaction = {fromClientID, toClientID, amount};
+            client.sendTransaction(transaction);
+            response = client.receieveReponseFromServer();
+            sendResponseToUI(response, new_socket);
         }
         // Add more commands as needed
     }
