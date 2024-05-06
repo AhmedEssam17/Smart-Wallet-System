@@ -1,0 +1,43 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* Align items to the start instead of center */
+    justify-content: center;
+    min-height: 100vh;
+    background-color: #f4f4f4;
+    padding: 20px;
+}
+
+.title {
+    color: #333;
+    font-size: 24px;
+    margin-bottom: 20px;
+    align-self: center; /* Center only the title */
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+}
+
+.button {
+    padding: 10px 20px;
+    font-size: 16px;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    outline: none;
+}
+
+.button-undo {
+    background-color: #f44336; /* Red */
+}
+
+.button-redo {
+    background-color: #4CAF50; /* Green */
+}
+
+.button:hover {
+    opacity: 0.8;
+}

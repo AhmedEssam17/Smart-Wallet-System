@@ -124,61 +124,29 @@ app.get('/api/clientInfo/:clientID', (req, res) => {
 });
 
 // Send Transaction Route
-app.post('/api/transaction', (req, res) => {
+app.post('/api/transactions/', async (req, res) => {
     const { fromClientID, toClientID, amount } = req.body;
     // Format the data as a space-separated string
     client.write(`sendTransaction ${fromClientID} ${toClientID} ${amount}\n`);
 
     client.once('data', (data) => {
-        const response = data.toString();
-        if (response === "success") {
-            res.send({ status: "success", message: "Transaction successful" });
+        const transactionId = data.toString().trim();
+        if (transactionId !== "0") {
+            res.send({ status: "success", message: "Transaction processed successfully", transactionId });
         } else {
-            res.status(500).send({ status: "error", message: "Transaction failed" });
-        }
-    });
-});
-
-app.get('/api/transactions/active/:clientId', async (req, res) => {
-    const clientId = req.params.clientId;
-    client.write(`fetchActiveTransactions ${clientId}\n`);
-
-    client.once('data', (data) => {
-        const dataString = data.toString();
-        try {
-            const transactions = JSON.parse(dataString); // Assuming dataString is a JSON string of transactions
-            res.send(transactions);
-        } catch (error) {
-            console.error('Failed to parse transactions:', error);
-            res.status(500).send({ error: "Failed to parse transactions" });
-        }
-    });
-});
-
-app.get('/api/transactions/undone/:clientId', async (req, res) => {
-    const clientId = req.params.clientId;
-    client.write(`fetchUndoneTransactions ${clientId}\n`);
-
-    client.once('data', (data) => {
-        const dataString = data.toString();
-        try {
-            const transactions = JSON.parse(dataString); // Assuming dataString is a JSON string of transactions
-            res.send(transactions);
-        } catch (error) {
-            console.error('Failed to parse transactions:', error);
-            res.status(500).send({ error: "Failed to parse transactions" });
+            res.status(500).send({ status: "error", message: "Transaction processing failed" });
         }
     });
 });
 
 app.post('/api/transactions/undo', (req, res) => {
-    const { transactionIdToModify } = req.body;
-    client.write(`undo ${transactionIdToModify}\n`);
+    const { undoId } = req.body;
+    client.write(`undo ${undoId}\n`);
 
     client.once('data', (data) => {
-        const response = data.toString();
+        const response = data.toString().trim();
         if (response === "success") {
-            res.send({ status: "success", message: "Undo successful" });
+            res.send({ status: "success", message: "Undo successful", undoId: 0, redoId: undoId });
         } else {
             res.status(500).send({ status: "error", message: "Undo failed" });
         }
@@ -186,8 +154,8 @@ app.post('/api/transactions/undo', (req, res) => {
 });
 
 app.post('/api/transactions/redo', async (req, res) => {
-    const { transactionIdToModify } = req.body;
-    client.write(`redo ${transactionIdToModify}\n`);
+    const { redoId } = req.body;
+    client.write(`redo ${redoId}\n`);
 
     client.once('data', (data) => {
         const response = data.toString();

@@ -11,6 +11,8 @@
 #include <vector>
 #include <arpa/inet.h>
 #include <sstream>
+#include <fstream>
+#include <iostream>
 using namespace std;
 
 sqlite3* db;
@@ -30,13 +32,9 @@ public:
     int undoTransaction(int transactionID);
     int redoTransaction(int transactionID);
     ClientInfo displayClientInfo(const int& clientID);
-    std::vector<TransactionTable> fetchActiveTransactions(int clientId);
-    std::vector<TransactionTable> fetchUndoneTransactions(int clientId);
-    std::string serializeTransactions(const std::vector<TransactionTable>& transactions);
 
 private:
     int serverSocket;
-    std::mutex dbMutex;
     void initSocket();
     void closeSocket();
     void listenForConnections();
@@ -47,70 +45,6 @@ private:
     int registerClient(int clientSocket);
 
 };
-
-std::string Server::serializeTransactions(const std::vector<TransactionTable>& transactions) {
-    std::ostringstream jsonStream;
-    jsonStream << "[";
-    for (size_t i = 0; i < transactions.size(); ++i) {
-        const auto& tx = transactions[i];
-        jsonStream << "{"
-                    << "\"transactionID\": " << tx.transactionID << ", "
-                   << "\"fromAccount\": " << tx.fromAccount << ", "
-                   << "\"toAccount\": " << tx.toAccount << ", "
-                   << "\"amount\": " << tx.amount
-                   << "}";
-        if (i < transactions.size() - 1) {
-            jsonStream << ", ";
-        }
-    }
-    jsonStream << "]";
-    return jsonStream.str();
-}
-
-std::vector<TransactionTable> Server::fetchActiveTransactions(int clientId) {
-    std::vector<TransactionTable> transactions;
-    sqlite3_stmt* stmt;
-    std::string sql = "SELECT * FROM transactions WHERE sender_id = ?";
-
-    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
-    sqlite3_bind_int(stmt, 1, clientId);
-
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
-        TransactionTable tx;
-        tx.transactionID = sqlite3_column_int(stmt, 0);
-        tx.fromAccount = sqlite3_column_int(stmt, 1);
-        tx.toAccount = sqlite3_column_int(stmt, 2);
-        tx.amount = sqlite3_column_int(stmt, 3);
-        transactions.push_back(tx);
-    }
-
-    sqlite3_finalize(stmt);
-    sqlite3_close(db);
-    return transactions;
-}
-
-// Function to fetch undone transactions
-std::vector<TransactionTable> Server::fetchUndoneTransactions(int clientId) {
-    std::vector<TransactionTable> transactions;
-    sqlite3_stmt* stmt;
-    std::string sql = "SELECT * FROM undone_transactions WHERE sender_id = ?";
-
-    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
-    sqlite3_bind_int(stmt, 1, clientId);
-
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
-        TransactionTable tx;
-        tx.transactionID = sqlite3_column_int(stmt, 0);
-        tx.fromAccount = sqlite3_column_int(stmt, 1);
-        tx.toAccount = sqlite3_column_int(stmt, 2);
-        tx.amount = sqlite3_column_int(stmt, 3);
-        transactions.push_back(tx);
-    }
-
-    sqlite3_finalize(stmt);
-    sqlite3_close(db);
-    return transactions;
-}
 
 Server::Server() {
     initSocket();
@@ -157,8 +91,6 @@ void Server::listenForConnections() {
 
     cout << "Server started. Listening on port 8888..." << endl;
 
-    int clientCount = 0;
-
     while (true) {
         struct sockaddr_in clientAddr;
         socklen_t clientAddrLen = sizeof(clientAddr);
@@ -168,12 +100,8 @@ void Server::listenForConnections() {
             continue;
         }
 
-        // Handle the client connection in a separate thread or process
         std::thread clientThread(&Server::handleConnection, this, clientSocket);
-        clientThread.detach(); // Detach the thread to let it run independently
-        clientCount++;
-        cout << "clientCount = " << clientCount << endl;
-        // handleConnection(clientSocket);
+        clientThread.detach();
     }
 }
 
@@ -265,7 +193,7 @@ void Server::handleConnection(int clientSocket) {
             recv(clientSocket, &action, sizeof(action), 0);
             switch (action){
                 case LOGIN:
-                    cout << "Client Attempting verifyClient()" << endl;
+                    cout << "Attempting Login..." << endl;
                     clientInfo.clientID = verifyClient(clientSocket);
                     if(clientInfo.clientID == 0){
                         response = 0;
@@ -276,7 +204,7 @@ void Server::handleConnection(int clientSocket) {
                     send(clientSocket, &response, sizeof(response), 0);
                 break;
                 case REGISTER:
-                    cout << "Client Attempting receiveClientInfo()" << endl;
+                    cout << "Attempting Registeration..." << endl;
                     clientInfo.clientID = registerClient(clientSocket);
                     if(clientInfo.clientID != 0){
                         response = 1;
@@ -287,67 +215,47 @@ void Server::handleConnection(int clientSocket) {
                     send(clientSocket, &response, sizeof(response), 0);
                 break;
                 case DISPLAYINFO:
-                    cout << "Client Attempting displayClientInfo()" << endl;
+                    cout << "Attempting Displaying Info..." << endl;
                     clientInfo = displayClientInfo(clientInfo.clientID);
                     send(clientSocket, &clientInfo, sizeof(clientInfo), 0);
                 break;
                 case BALANCE:
-                    cout << "Client Attempting getAccountBalance()" << endl;
-                    cout << "getAccountBalance >> clientInfo.clientID = " << clientInfo.clientID << endl;
+                    cout << "Attempting Get Balance..." << endl;
                     clientInfo.balance = getAccountBalance(clientInfo.clientID);
                     send(clientSocket, &clientInfo.balance, sizeof(clientInfo.balance), 0);
                 break;
                 case DEPOSIT:
-                    cout << "Client Attempting depositMoney()" << endl;
+                    cout << "Attempting Deposit Money..." << endl;
                     recv(clientSocket, &networkAmount, sizeof(networkAmount), 0);
-                    cout << "networkAmount = "<< networkAmount << endl;
                     amount = ntohl(networkAmount);
-                    cout << "amount = "<< amount << endl;
                     response = depositMoney(clientInfo.clientID, amount);
                     send(clientSocket, &response, sizeof(response), 0);
                 break;
                 case WITHDRAW:
-                    cout << "Client Attempting withdrawMoney()" << endl;
+                    cout << "Attempting Withdraw Money..." << endl;
                     recv(clientSocket, &networkAmount, sizeof(networkAmount), 0);
                     amount = ntohl(networkAmount);
                     response = withdrawMoney(clientInfo.clientID, amount);
                     send(clientSocket, &response, sizeof(response), 0);
                 break;
                 case TRANSACTION:
-                    cout << "Client Attempting receiveTransaction()" << endl;
+                    cout << "Attempting Transaction..." << endl;
                     response = receiveTransaction(clientSocket, clientInfo.clientID);
                     send(clientSocket, &response, sizeof(response), 0);
                 break;
                 case UNDO:
-                    cout << "Client Attempting undoTransaction()" << endl;
+                    cout << "Attempting Undo Transaction..." << endl;
                     recv(clientSocket, &transactionID, sizeof(transactionID), 0);
                     response = undoTransaction(transactionID);
                     send(clientSocket, &response, sizeof(response), 0);
                 break;
                 case REDO:
-                    cout << "Client Attempting redoTransaction()" << endl;
+                    cout << "Attempting Redo Transaction..." << endl;
                     recv(clientSocket, &transactionID, sizeof(transactionID), 0);
                     response = redoTransaction(transactionID);
                     send(clientSocket, &response, sizeof(response), 0);
                 break;
-                case ACTIVETRANSACTION: {
-                    int clientId;
-                    recv(clientSocket, &clientId, sizeof(clientId), 0);
-                    std::vector<TransactionTable> activeTransactions = fetchActiveTransactions(clientId);
-                    std::string serialized = serializeTransactions(activeTransactions);
-                    send(clientSocket, serialized.c_str(), serialized.size(), 0);
-                break;
-                }
-                case UNDONETRANSACTION: {
-                    int clientId;
-                    recv(clientSocket, &clientId, sizeof(clientId), 0);
-                    std::vector<TransactionTable> undoneTransactions = fetchUndoneTransactions(clientId);
-                    std::string serialized = serializeTransactions(undoneTransactions);
-                    send(clientSocket, serialized.c_str(), serialized.size(), 0);
-                    break;
-                }
                 default:
-                    // cout << "Invalid Action" << endl;
                 break;
             }
         }
@@ -394,10 +302,8 @@ int Server::getAccountBalance(const int& clientID){
     int balance = 0;
     char* errMsg = nullptr;
 
-    // Construct the SQL query to select the balance for the given clientID
     string sql = "SELECT balance FROM clients WHERE clientID = ?;";
 
-    // Prepare the SQL statement
     sqlite3_stmt* stmt;
     int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
     if (rc != SQLITE_OK) {
@@ -405,16 +311,13 @@ int Server::getAccountBalance(const int& clientID){
         return balance;
     }
 
-    // Bind parameters to the statement
     sqlite3_bind_int(stmt, 1, clientID);
 
-    // Execute the statement
     rc = sqlite3_step(stmt);
     if (rc == SQLITE_ROW) {
         balance = sqlite3_column_int(stmt, 0);
     }
 
-    // Finalize the statement
     sqlite3_finalize(stmt);
 
     return balance;
@@ -422,17 +325,13 @@ int Server::getAccountBalance(const int& clientID){
 
 int Server::depositMoney(const int& clientID, int amount){
 
-    cout << "Deposit amount = " << amount << endl;
-
     int currentBalance = getAccountBalance(clientID);
     int newBalance = currentBalance + amount;
 
     char* errMsg = nullptr;
 
-    // Construct the SQL query to update the balance for the given clientID
     string sql = "UPDATE clients SET balance = ? WHERE clientID = ?;";
 
-    // Prepare the SQL statement
     sqlite3_stmt* stmt;
     int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
     if (rc != SQLITE_OK) {
@@ -440,18 +339,15 @@ int Server::depositMoney(const int& clientID, int amount){
         return 0;
     }
 
-    // Bind parameters to the statement
     sqlite3_bind_int(stmt, 1, newBalance);
     sqlite3_bind_int(stmt, 2, clientID);
 
-    // Execute the statement
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
         cerr << "SQL execute error: " << sqlite3_errmsg(db) << endl;
         return 0;
     }
 
-    // Finalize the statement
     sqlite3_finalize(stmt);
     return 1;
 }
@@ -467,10 +363,8 @@ int Server::withdrawMoney(const int& clientID, int amount){
 
     char* errMsg = nullptr;
 
-    // Construct the SQL query to update the balance for the given clientID
     string sql = "UPDATE clients SET balance = ? WHERE clientID = ?;";
 
-    // Prepare the SQL statement
     sqlite3_stmt* stmt;
     int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
     if (rc != SQLITE_OK) {
@@ -478,18 +372,15 @@ int Server::withdrawMoney(const int& clientID, int amount){
         return 0;
     }
 
-    // Bind parameters to the statement
     sqlite3_bind_int(stmt, 1, newBalance);
     sqlite3_bind_int(stmt, 2, clientID);
 
-    // Execute the statement
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
         cerr << "SQL execute error: " << sqlite3_errmsg(db) << endl;
         return 0;
     }
 
-    // Finalize the statement
     sqlite3_finalize(stmt);
     return 1;
 }
@@ -497,20 +388,19 @@ int Server::withdrawMoney(const int& clientID, int amount){
 int Server::processTransaction(const int& clientID, const Transaction& transaction){
     int depositResponse;
     int withdrawResponse;
-    // Check if the fromAccount is equal to clientID
+
     if (transaction.fromAccount != clientID) {
         cerr << "Invalid transaction: fromAccount does not match clientID" << endl;
         return 0;
     }
 
-    // Check if the toAccount exists in the database
+
     bool toAccountExists = checkClientExists(transaction.toAccount);
     if (!toAccountExists) {
         cerr << "Invalid transaction: toAccount does not exist" << endl;
         return 0;
     }
 
-    // Check if the amount required to be transferred is sufficient in the current user balance
     int balance = getAccountBalance(clientID);
     if (balance < transaction.amount) {
         cerr << "Invalid transaction: insufficient balance" << endl;
@@ -524,7 +414,6 @@ int Server::processTransaction(const int& clientID, const Transaction& transacti
         return 0;
     }
 
-    // Insert the transaction into the transactions table
     sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
     string sql = "INSERT INTO transactions (sender_id, recipient_id, amount) VALUES (?, ?, ?);";
     sqlite3_stmt* stmt;
@@ -538,18 +427,17 @@ int Server::processTransaction(const int& clientID, const Transaction& transacti
         sqlite3_finalize(stmt);
         return 0;
     }
+    int transactionID = sqlite3_last_insert_rowid(db);
     sqlite3_finalize(stmt);
     sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
 
-    cout << "Transaction processed successfully" << endl;
-
-    return 1;
+    cout << "Transaction processed successfully, ID: " << transactionID << endl;
+    return transactionID;
 }
 
 int Server::undoTransaction(int transactionID) {
     sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
 
-    // Retrieve transaction details
     string sql = "SELECT sender_id, recipient_id, amount FROM transactions WHERE transaction_id = ?";
     sqlite3_stmt* stmt;
     sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
@@ -565,14 +453,12 @@ int Server::undoTransaction(int transactionID) {
     int amount = sqlite3_column_int(stmt, 2);
     sqlite3_finalize(stmt);
 
-    // Reverse the transaction effect on balances
     if (depositMoney(senderId, amount) == 0 || withdrawMoney(recipientId, amount) == 0) {
         cerr << "Error reversing balances" << endl;
         sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
         return 0;
     }
 
-    // Move the transaction from transactions to undone_transactions
     sql = "INSERT INTO undone_transactions SELECT * FROM transactions WHERE transaction_id = ?";
     sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
     sqlite3_bind_int(stmt, 1, transactionID);
@@ -584,7 +470,6 @@ int Server::undoTransaction(int transactionID) {
     }
     sqlite3_finalize(stmt);
 
-    // Delete the transaction from transactions table
     sql = "DELETE FROM transactions WHERE transaction_id = ?";
     sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
     sqlite3_bind_int(stmt, 1, transactionID);
@@ -603,7 +488,6 @@ int Server::undoTransaction(int transactionID) {
 int Server::redoTransaction(int transactionID) {
     sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
 
-    // Retrieve transaction details from undone_transactions
     string sql = "SELECT sender_id, recipient_id, amount FROM undone_transactions WHERE transaction_id = ?";
     sqlite3_stmt* stmt;
     sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
@@ -619,14 +503,12 @@ int Server::redoTransaction(int transactionID) {
     int amount = sqlite3_column_int(stmt, 2);
     sqlite3_finalize(stmt);
 
-    // Reapply the transaction effect on balances
     if (withdrawMoney(senderId, amount) == 0 || depositMoney(recipientId, amount) == 0) {
         cerr << "Error reapplying balances" << endl;
         sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
         return 0;
     }
 
-    // Move the transaction from undone_transactions to transactions
     sql = "INSERT INTO transactions SELECT * FROM undone_transactions WHERE transaction_id = ?";
     sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
     sqlite3_bind_int(stmt, 1, transactionID);
@@ -638,7 +520,6 @@ int Server::redoTransaction(int transactionID) {
     }
     sqlite3_finalize(stmt);
 
-    // Delete the transaction from undone_transactions table
     sql = "DELETE FROM undone_transactions WHERE transaction_id = ?";
     sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
     sqlite3_bind_int(stmt,1, transactionID);
@@ -665,7 +546,6 @@ int Server::registerClient(int clientSocket){
     int password;
     recv(clientSocket, &password, sizeof(password), 0);
 
-    // Check if clientID already exists
     if (checkClientExists(clientID)){
         cout << "ClientID has already registered before" << endl;
         return 0;
@@ -703,10 +583,8 @@ ClientInfo Server::displayClientInfo(const int& clientID){
     ClientInfo info;
     info.clientID = 0;
 
-    // Construct the SQL query
     string sql = "SELECT * FROM clients WHERE clientID = ?;";
 
-    // Prepare the SQL statement
     sqlite3_stmt* stmt;
     int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
     if (rc != SQLITE_OK) {
@@ -714,10 +592,8 @@ ClientInfo Server::displayClientInfo(const int& clientID){
         return info;
     }
 
-    // Bind parameters to the statement
     sqlite3_bind_int(stmt, 1, clientID);
 
-    // Execute the statement
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_ROW) {
         cerr << "Client with ID " << clientID << " not found." << endl;
@@ -725,7 +601,6 @@ ClientInfo Server::displayClientInfo(const int& clientID){
         return info;
     }
 
-    // Read the client information from the query result
     int id = sqlite3_column_int(stmt, 1);
     const unsigned char* name = sqlite3_column_text(stmt, 2);
     int age = sqlite3_column_int(stmt, 3);
@@ -734,16 +609,6 @@ ClientInfo Server::displayClientInfo(const int& clientID){
     const unsigned char* email = sqlite3_column_text(stmt, 6);
     int balance = sqlite3_column_int(stmt, 7);
 
-    // Print the client information
-    cout << "Client ID: " << id << endl;
-    cout << "Name: " << name << endl;
-    cout << "Age: " << age << endl;
-    cout << "National ID: " << nationalID << endl;
-    cout << "Mobile Number: " << mobileNum << endl;
-    cout << "Email: " << email << endl;
-    cout << "Balance: " << balance << endl;
-
-    // Copy the client information into the info struct
     info.clientID = id;
     strcpy(info.name, reinterpret_cast<const char*>(name));
     info.age = age;
@@ -752,13 +617,10 @@ ClientInfo Server::displayClientInfo(const int& clientID){
     strcpy(info.email, reinterpret_cast<const char*>(email));
     info.balance = balance;
 
-    // Finalize the statement
     sqlite3_finalize(stmt);
 
     return info;
 }
-
-
 
 void initDatabase(){
 
@@ -839,9 +701,7 @@ int main() {
     server.start();
 
     // Accept incoming connections
-    while (true) {
-        //TODO
-    }
+    while (true) {}
 
     server.stop();
 

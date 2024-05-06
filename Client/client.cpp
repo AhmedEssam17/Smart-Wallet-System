@@ -8,6 +8,9 @@
 #include <map>
 #include "../conf/conf.h"
 #include <sstream>
+#include <algorithm>
+#include <cctype>
+#include <string>
 using namespace std;
 
 int action;
@@ -29,10 +32,6 @@ public:
     void clientRegister(const int& clientID, const int& password, const ClientInfo& info);
     ClientInfo displayInfo(const int& clientID);
     int receieveReponseFromServer();
-    std::vector<TransactionTable> fetchActiveTransactions(const int& clientId);
-    std::vector<TransactionTable> fetchUndoneTransactions(const int& clientId);
-    std::vector<TransactionTable> parseTransactions(const std::string& data);
-
 private:
     int clientSocket;
     void initSocket();
@@ -89,9 +88,7 @@ void Client::depositMoney(const int& clientID, int amount){
 void Client::withdrawMoney(const int& clientID, int amount){
     action = WITHDRAW;
     send(clientSocket, &action, sizeof(action), 0);
-    cout << "amount = "<< amount << endl;
     int networkAmount = htonl(amount);
-    cout << "networkAmount = "<< networkAmount << endl;
     send(clientSocket, &networkAmount, sizeof(networkAmount), 0);
 }
 
@@ -131,9 +128,6 @@ void Client::clientLogin(const int& clientID, const int& password){
     int networkClientID = htonl(clientID);
     int networkPassword = htonl(password);
 
-    cout << "clientID " << clientID << endl;
-    cout << "password " << password << endl;
-
     send(clientSocket, &networkClientID, sizeof(networkClientID), 0);
     send(clientSocket, &networkPassword, sizeof(networkPassword), 0);
 }
@@ -157,86 +151,22 @@ ClientInfo Client::displayInfo(const int& clientID){
     return clientInfo;
 }
 
-// Function to request and receive active transactions
-std::vector<TransactionTable> Client::fetchActiveTransactions(const int& clientId) {
-    int action = ACTIVETRANSACTION;
-    send(clientSocket, &action, sizeof(action), 0);
-    send(clientSocket, &clientId, sizeof(clientId), 0);
-
-    char buffer[4096];
-    recv(clientSocket, buffer, sizeof(buffer), 0);
-    std::string data(buffer);
-    return parseTransactions(data);
-}
-
-std::vector<TransactionTable> Client::fetchUndoneTransactions(const int& clientId) {
-    int action = UNDONETRANSACTION;
-    send(clientSocket, &action, sizeof(action), 0);
-    send(clientSocket, &clientId, sizeof(clientId), 0);
-
-    char buffer[4096];
-    recv(clientSocket, buffer, sizeof(buffer), 0);
-    std::string data(buffer);
-    return parseTransactions(data);
-}
-
-std::vector<TransactionTable> Client::parseTransactions(const std::string& data) {
-    std::vector<TransactionTable> transactions;
-    std::istringstream iss(data);
-    std::string token;
-    while (getline(iss, token, '{')) {
-        getline(iss, token, '}');
-        std::istringstream tokenStream(token);
-        std::string key, value;
-        TransactionTable tx;
-        while (getline(tokenStream, key, ':')) {
-            getline(tokenStream, value, ',');
-            if (key.find("transactionID") != std::string::npos) {
-                tx.transactionID = std::stoi(value);
-            } else if (key.find("fromAccount") != std::string::npos) {
-                tx.fromAccount = std::stoi(value);
-            } else if (key.find("toAccount") != std::string::npos) {
-                tx.toAccount = std::stoi(value);
-            } else if (key.find("amount") != std::string::npos) {
-                tx.amount = std::stoi(value);
-            }
-        }
-        transactions.push_back(tx);
-    }
-    return transactions;
-}
-
-void printInfo(const ClientInfo& clientInfo){
-    cout << "ID = " << clientInfo.clientID << endl;
-    cout << "Name = " << clientInfo.name << endl;
-    cout << "Age = " << clientInfo.age << endl;
-    cout << "Mobile Num = " << clientInfo.mobileNum << endl;
-    cout << "NationalID = " << clientInfo.nationalID << endl;
-    cout << "Balance = " << clientInfo.balance << endl;
-    cout << "email = " << clientInfo.email << endl;
-}
-
 int Client::receieveReponseFromServer(){
     int response;
     recv(clientSocket, &response, sizeof(response), 0);
-    cout << "response = "<< response << endl;
     return response;
 }
 
 void sendResponseToUI(int response, int nodeSocket){
     string responseString;
-    if(response == 1){
+    if(response != 0){
         responseString = "success";
     }
     else{
         responseString = "failed";
     }
-    cout << "responseString = " << responseString << endl;
     send(nodeSocket, responseString.c_str(), responseString.length(), 0);
 }
-
-#include <sstream>
-#include <string>
 
 void sendClientInfoAsJson(int new_socket, const ClientInfo& info) {
     std::ostringstream jsonStream;
@@ -254,24 +184,6 @@ void sendClientInfoAsJson(int new_socket, const ClientInfo& info) {
     send(new_socket, jsonString.c_str(), jsonString.length(), 0);
 }
 
-void sendTransactionTableAsJson(int new_socket, const std::vector<TransactionTable>& transactions){
-    std::ostringstream jsonStream;
-    jsonStream << "[";
-    for (size_t i = 0; i < transactions.size(); ++i) {
-        const auto& tx = transactions[i];
-        jsonStream << "{"
-                    << "\"transactionID\": " << tx.transactionID << ", "
-                   << "\"fromAccount\": " << tx.fromAccount << ", "
-                   << "\"toAccount\": " << tx.toAccount << ", "
-                   << "\"amount\": " << tx.amount
-                   << "}";
-        if (i < transactions.size() - 1) jsonStream << ", ";
-    }
-    jsonStream << "]";
-    std::string data = jsonStream.str();
-    send(new_socket, data.c_str(), data.length(), 0);
-}
-
 int main() {
     int server_fd, new_socket;
     struct sockaddr_in address;
@@ -279,13 +191,11 @@ int main() {
     int addrlen = sizeof(address);
     char buffer[1024] = {0};
 
-    // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
 
-    // Forcefully attaching socket to the port 8080
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
         perror("setsockopt");
         exit(EXIT_FAILURE);
@@ -295,7 +205,6 @@ int main() {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(8080);
 
-    // Bind the socket to the address
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
@@ -328,118 +237,81 @@ int main() {
         if (cmd == "login") {
             int clientID, password;
             iss >> clientID >> password;
-            cout << "Received command: " << cmd << endl;
-            cout << "clientID: " << clientID << endl;
-            cout << "password: " << password << endl;
             client.clientLogin(clientID, password);
             response = client.receieveReponseFromServer();
             sendResponseToUI(response, new_socket);
-        } else if (cmd == "register") {
+        } 
+        else if (cmd == "register") {
             int clientID;
             int password;
             iss >> clientID >> password;
-
             string name, age, mobileNum, nationalID, email, balance;
             iss >> name >> age >> mobileNum >> nationalID >> email >> balance;
 
             ClientInfo info;
             info.clientID = clientID;
             strcpy(info.name, name.c_str());
-            
-            try {
-                info.age = stoi(age);
-            } catch (const std::invalid_argument& e) {
-                cerr << "Invalid age: " << age << endl;
-                continue; // Skip processing this line
-            }
-
+            info.age = stoi(age);
             strcpy(info.mobileNum, mobileNum.c_str());
             strcpy(info.nationalID, nationalID.c_str());
             strcpy(info.email, email.c_str());
-            
-            try {
-                info.balance = stoi(balance);
-            } catch (const std::invalid_argument& e) {
-                cerr << "Invalid balance: " << balance << endl;
-                continue; // Skip processing this line
-            }
+            info.balance = stoi(balance);
 
             client.clientRegister(clientID, password, info);
             response = client.receieveReponseFromServer();
             sendResponseToUI(response, new_socket);
-        } else if (cmd == "balance") {
+        } 
+        else if (cmd == "balance") {
             int clientID;
             iss >> clientID;
-            cout << "Received command: " << cmd << endl;
-            cout << "clientID: " << clientID << endl;
             int balance = client.getAccountBalance(clientID);
-            // response = client.receieveReponseFromServer();
-            cout << "After getAccountBalance >> Balance = " << balance << endl;
             string balanceStr = to_string(balance);
             send(new_socket, balanceStr.c_str(), balanceStr.size(), 0);
-            // sendResponseToUI(response, new_socket);
-        } else if (cmd == "deposit") {
+        } 
+        else if (cmd == "deposit") {
             int clientID;
             int amount;
-            cout << "Received command: " << cmd << endl;
             iss >> clientID >> amount;
-            cout << "clientID: " << clientID << endl;
-            cout << "amount: " << amount << endl;
             client.depositMoney(clientID, amount);
             response = client.receieveReponseFromServer();
             sendResponseToUI(response, new_socket);
-        } else if (cmd == "withdraw") {
+        } 
+        else if (cmd == "withdraw") {
             int clientID;
             int amount;
-            cout << "Received command: " << cmd << endl;
             iss >> clientID >> amount;
-            cout << "clientID: " << clientID << endl;
-            cout << "amount: " << amount << endl;
             client.withdrawMoney(clientID, amount);
             response = client.receieveReponseFromServer();
             sendResponseToUI(response, new_socket);
-        } else if (cmd == "displayInfo") {
+        } 
+        else if (cmd == "displayInfo") {
             int clientID;
             iss >> clientID;
-            cout << "Received command: " << cmd << endl;
-            cout << "clientID: " << clientID << endl;
             ClientInfo info = client.displayInfo(clientID);
             sendClientInfoAsJson(new_socket, info);
-        } else if (cmd == "sendTransaction") {
+        } 
+        else if (cmd == "sendTransaction") {
             int fromClientID, toClientID, amount;
             iss >> fromClientID >> toClientID >> amount;
-            cout << "Received command: " << cmd << endl;
-            cout << "From ClientID: " << fromClientID << ", To ClientID: " << toClientID << ", Amount: " << amount << endl;
             Transaction transaction = {fromClientID, toClientID, amount};
             client.sendTransaction(transaction);
             response = client.receieveReponseFromServer();
-            sendResponseToUI(response, new_socket);
-        } else if (cmd == "undo") {
+            string transId = to_string(response); 
+            send(new_socket, transId.c_str(), transId.length(), 0);
+        } 
+        else if (cmd == "undo") {
             int transactionID;
             iss >> transactionID;
-            cout << "Received command: " << cmd << " for Transaction ID: " << transactionID << endl;
             client.undoTransaction(transactionID);
             response = client.receieveReponseFromServer();
             sendResponseToUI(response, new_socket);
-        } else if (cmd == "redo") {
+        } 
+        else if (cmd == "redo") {
             int transactionID;
             iss >> transactionID;
-            cout << "Received command: " << cmd << " for Transaction ID: " << transactionID << endl;
             client.redoTransaction(transactionID);
             response = client.receieveReponseFromServer();
             sendResponseToUI(response, new_socket);
-        } else if (cmd == "fetchActiveTransactions") {
-            int clientId;
-            iss >> clientId;
-            cout << "Received command: " << cmd << " for clientId: " << clientId << endl;
-            std::vector<TransactionTable> activeTransactions = client.fetchActiveTransactions(clientId);
-            sendTransactionTableAsJson(new_socket, activeTransactions);
-        } else if (cmd == "fetchUndoneTransactions") {
-            int clientId;
-            iss >> clientId;
-            cout << "Received command: " << cmd << " for clientId: " << clientId << endl;
-            std::vector<TransactionTable> undoneTransactions = client.fetchUndoneTransactions(clientId);
-            sendTransactionTableAsJson(new_socket, undoneTransactions);
         }
     }
 
