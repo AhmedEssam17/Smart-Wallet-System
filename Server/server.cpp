@@ -68,8 +68,6 @@ std::string Server::serializeTransactions(const std::vector<TransactionTable>& t
 }
 
 std::vector<TransactionTable> Server::fetchActiveTransactions(int clientId) {
-    sqlite3* db;
-    sqlite3_open("database.db", &db);
     std::vector<TransactionTable> transactions;
     sqlite3_stmt* stmt;
     std::string sql = "SELECT * FROM transactions WHERE sender_id = ?";
@@ -93,8 +91,6 @@ std::vector<TransactionTable> Server::fetchActiveTransactions(int clientId) {
 
 // Function to fetch undone transactions
 std::vector<TransactionTable> Server::fetchUndoneTransactions(int clientId) {
-    sqlite3* db;
-    sqlite3_open("database.db", &db);
     std::vector<TransactionTable> transactions;
     sqlite3_stmt* stmt;
     std::string sql = "SELECT * FROM undone_transactions WHERE sender_id = ?";
