@@ -25,14 +25,6 @@ cd Smart-Wallet-System/Client
 g++ -o ../exe/client client.cpp
 ../exe/client
 ```
-
-##### C++ Server
-Navigate to the Server directory within the Smart-Wallet-System and compile and run the server using the following commands:
-```bash
-cd Smart-Wallet-System/Server
-g++ server.cpp -o ../exe/server -lsqlite3 -pthread
-../exe/server > logs.txt
-```
 This compiles the client.cpp and runs the resulting executable, allowing it to communicate with the C++ server.
 
 ##### NodeJS Server
